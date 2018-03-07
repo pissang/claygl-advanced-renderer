@@ -5,10 +5,16 @@ import * as zrUtil from 'zrender/src/core/util';
 
 function ClayAdvancedRenderer(renderer, scene, timeline, graphicOpts) {
     graphicOpts = zrUtil.merge({}, graphicOpts);
+    if (typeof graphicOpts.shadow === 'boolean') {
+        graphicOpts.shadow = {
+            enable: graphicOpts.shadow
+        };
+    }
     graphicOpts = zrUtil.merge(graphicOpts, defaultGraphicConfig);
 
     this._renderMain = new RenderMain(renderer, scene, graphicOpts.shadow);
 
+    this._renderMain.setShadow(graphicOpts.shadow);
     this._renderMain.setPostEffect(graphicOpts.postEffect);
 
     this._needsRefresh = false;
@@ -25,6 +31,11 @@ ClayAdvancedRenderer.prototype.render = function (renderImmediately) {
 ClayAdvancedRenderer.prototype.setPostEffect = function (opts) {
     zrUtil.merge(this._graphicOpts.postEffect, opts, true);
     this._renderMain.setPostEffect(this._graphicOpts.postEffect);
+};
+
+ClayAdvancedRenderer.prototype.setShadow = function (opts) {
+    zrUtil.merge(this._graphicOpts.shadow, opts, true);
+    this._renderMain.setShadow(this._graphicOpts.shadow);
 };
 
 ClayAdvancedRenderer.prototype._loop = function (frameTime) {

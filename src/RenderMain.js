@@ -24,19 +24,6 @@ function RenderMain(renderer, scene, enableShadow) {
         });
     }
 
-    var pcfKernels = [];
-    var off = 0;
-    for (var i = 0; i < 30; i++) {
-        var pcfKernel = [];
-        for (var k = 0; k < 6; k++) {
-            pcfKernel.push(halton(off, 2) * 4.0 - 2.0);
-            pcfKernel.push(halton(off, 3) * 4.0 - 2.0);
-            off++;
-        }
-        pcfKernels.push(pcfKernel);
-    }
-    this._pcfKernels = pcfKernels;
-
     this._enableTemporalSS = 'auto';
 
     scene.on('beforerender', function (renderer, scene, camera) {
@@ -202,9 +189,6 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
     }
 
     this.afterRenderAll(renderer, scene, camera);
-
-    // this._compositor._gBufferPass.renderDebug(renderer, camera, 'normal');
-    // this._shadowMapPass.renderDebug(renderer);
 };
 
 RenderMain.prototype._updateSRGBOfList = function (list) {
@@ -305,9 +289,24 @@ RenderMain.prototype.setPostEffect = function (opts, api) {
     });
 };
 
+RenderMain.prototype.setShadow = function (opts) {
+    var pcfKernels = [];
+    var off = 0;
+    for (var i = 0; i < 30; i++) {
+        var pcfKernel = [];
+        for (var k = 0; k < opts.kernelSize; k++) {
+            pcfKernel.push((halton(off, 2) * 2.0 - 1.0) * opts.blurSize);
+            pcfKernel.push((halton(off, 3) * 2.0 - 1.0) * opts.blurSize);
+            off++;
+        }
+        pcfKernels.push(pcfKernel);
+    }
+    this._pcfKernels = pcfKernels;
+};
+
 RenderMain.prototype.isDOFEnabled = function () {
     return this._enablePostEffect && this._enableDOF;
-}
+};
 
 RenderMain.prototype.setDOFFocusOnPoint = function (depth) {
     if (this._enablePostEffect) {

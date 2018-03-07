@@ -1,6 +1,10 @@
 export default {
     // If enable shadow
-    shadow: true,
+    shadow: {
+        enable: true,
+        kernelSize: 6,
+        blurSize: 2
+    },
 
     // Configuration about post effects.
     postEffect: {
