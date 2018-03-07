@@ -1719,8 +1719,7 @@ function RenderMain(renderer, scene, enableShadow) {
 
     if (enableShadow) {
         this._shadowMapPass = new ShadowMapPass({
-            lightFrustumBias: 20,
-            softShadow: ShadowMapPass.VSM
+            lightFrustumBias: 20
         });
     }
 
@@ -6426,6 +6425,8 @@ ClayAdvancedRenderer.prototype.dispose = function () {
 
     this._renderMain.dispose();
 };
+
+ClayAdvancedRenderer.version = '0.1.0';
 
 return ClayAdvancedRenderer;
 

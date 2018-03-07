@@ -20,8 +20,7 @@ function RenderMain(renderer, scene, enableShadow) {
 
     if (enableShadow) {
         this._shadowMapPass = new ShadowMapPass({
-            lightFrustumBias: 20,
-            softShadow: ShadowMapPass.VSM
+            lightFrustumBias: 20
         });
     }
 

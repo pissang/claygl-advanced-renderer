@@ -97,4 +97,6 @@ ClayAdvancedRenderer.prototype.dispose = function () {
     this._renderMain.dispose();
 };
 
+ClayAdvancedRenderer.version = '0.1.0';
+
 export default ClayAdvancedRenderer;
