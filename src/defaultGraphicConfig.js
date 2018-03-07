@@ -28,15 +28,13 @@ export default {
             quality: 'medium'
         },
         // Configuration about screen space ambient occulusion
-        screenSpaceAmbientOcculusion: {
+        screenSpaceAmbientOcclusion: {
             // If enable SSAO
             enable: false,
-            // If physically corrected.
-            physical: false,
             // Sampling radius in work space.
             // Larger will produce more soft concat shadow.
             // But also needs higher quality or it will have more obvious artifacts
-            radius: 0.5,
+            radius: 0.2,
             // Quality of SSAO. 'low'|'medium'|'high'|'ultra'
             quality: 'medium',
             // Intensity of SSAO
@@ -45,6 +43,8 @@ export default {
         // Configuration about screen space reflection
         screenSpaceReflection: {
             enable: false,
+            // If physically corrected.
+            physical: false,
             // Quality of SSR. 'low'|'medium'|'high'|'ultra'
             quality: 'medium',
             // Surface with less roughness will have reflection.

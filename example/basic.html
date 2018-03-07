@@ -16,7 +16,15 @@
 
             init: function (app) {
                 this._advancedRenderer = new ClayAdvancedRenderer(app.renderer, app.scene, app.timeline, {
-                    shadow: true
+                    shadow: true,
+                    postEffect: {
+                        screenSpaceAmbientOcclusion: {
+                            enable: true
+                        },
+                        screenSpaceReflection: {
+                            enable: true
+                        }
+                    }
                 });
 
                 // Create a perspective camera.
@@ -29,12 +37,16 @@
                     color: 'red'
                 });
                 // Create a ground
-                this._ground = app.createPlane();
+                this._ground = app.createPlane({
+                    roughness: 0
+                });
                 this._ground.rotation.rotateX(-Math.PI / 2);
                 this._ground.scale.set(2, 2, 1);
 
                 // Create a directional light. The direction is from top right to left bottom, away from camera.
                 this._mainLight = app.createDirectionalLight([-1, -2, -1]);
+
+                app.createAmbientLight('#fff', 0.2);
 
                 this._advancedRenderer.render();
             }

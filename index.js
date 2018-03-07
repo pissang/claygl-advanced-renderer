@@ -1,11 +1,11 @@
 import RenderMain from './src/RenderMain';
 import defaultGraphicConfig from './src/defaultGraphicConfig';
-import defaultsDeep from 'lodash.defaultsdeep';
-import merge from 'lodash.merge';
+import * as zrUtil from 'zrender/src/core/util';
 
 
 function ClayAdvancedRenderer(renderer, scene, timeline, graphicOpts) {
-    graphicOpts = defaultsDeep({}, graphicOpts || {}, defaultGraphicConfig);
+    graphicOpts = zrUtil.merge({}, graphicOpts);
+    graphicOpts = zrUtil.merge(graphicOpts, defaultGraphicConfig);
 
     this._renderMain = new RenderMain(renderer, scene, graphicOpts.shadow);
 
@@ -23,7 +23,7 @@ ClayAdvancedRenderer.prototype.render = function (renderImmediately) {
 };
 
 ClayAdvancedRenderer.prototype.setPostEffect = function (opts) {
-    merge(this._graphicOpts.postEffect, opts);
+    zrUtil.merge(this._graphicOpts.postEffect, opts, true);
     this._renderMain.setPostEffect(this._graphicOpts.postEffect);
 };
 
