@@ -1,6 +1,6 @@
 // http://www.kode80.com/blog/2015/03/11/screen-space-reflections-in-unity-5/
 // http://casual-effects.blogspot.jp/2014/08/screen-space-ray-tracing.html
-@export ecgl.ssr.main
+@export car.ssr.main
 
 #define SHADER_NAME SSR
 #define MAX_ITERATION 20;
@@ -374,7 +374,7 @@ void main()
 @end
 
 // https://bartwronski.com/2014/03/23/gdc-follow-up-screenspace-reflections-filtering-and-up-sampling/
-@export ecgl.ssr.blur
+@export car.ssr.blur
 
 uniform sampler2D texture;
 uniform sampler2D gBufferTexture1;

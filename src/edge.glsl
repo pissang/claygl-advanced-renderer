@@ -1,4 +1,4 @@
-@export ecgl.edge
+@export car.edge
 // http://williamchyr.com/2014/03/development-update-edge-detection/
 // http://williamchyr.com/2014/05/revisiting-edge-detection/
 // http://williamchyr.com/2015/08/edge-detection-shader-deep-dive-part-1-even-or-thinner-edges/

@@ -56,10 +56,10 @@ function SSAOPass(opt) {
     opt = opt || {};
 
     this._ssaoPass = new Pass({
-        fragment: Shader.source('ecgl.ssao.estimate')
+        fragment: Shader.source('car.ssao.estimate')
     });
     this._blurPass = new Pass({
-        fragment: Shader.source('ecgl.ssao.blur')
+        fragment: Shader.source('car.ssao.blur')
     });
     this._framebuffer = new FrameBuffer();
 

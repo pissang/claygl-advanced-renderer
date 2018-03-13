@@ -440,7 +440,7 @@ export default {
 
         {
             'name': 'coc',
-            'shader': '#source(ecgl.dof.coc)',
+            'shader': '#source(car.dof.coc)',
             'outputs': {
                 'color': {
                     'parameters': {
@@ -459,7 +459,7 @@ export default {
 
         {
             'name': 'dof_far_blur',
-            'shader': '#source(ecgl.dof.diskBlur)',
+            'shader': '#source(car.dof.diskBlur)',
             'inputs': {
                 'texture': 'source',
                 'coc': 'coc'
@@ -479,7 +479,7 @@ export default {
         },
         {
             'name': 'dof_near_blur',
-            'shader': '#source(ecgl.dof.diskBlur)',
+            'shader': '#source(car.dof.diskBlur)',
             'inputs': {
                 'texture': 'source',
                 'coc': 'coc'
@@ -504,7 +504,7 @@ export default {
 
         {
             'name': 'dof_coc_blur',
-            'shader': '#source(ecgl.dof.diskBlur)',
+            'shader': '#source(car.dof.diskBlur)',
             'inputs': {
                 'texture': 'coc'
             },
@@ -528,7 +528,7 @@ export default {
 
         {
             'name': 'dof_composite',
-            'shader': '#source(ecgl.dof.composite)',
+            'shader': '#source(car.dof.composite)',
             'inputs': {
                 'original': 'source',
                 'blurred': 'dof_far_blur',

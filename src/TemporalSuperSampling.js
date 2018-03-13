@@ -5,7 +5,12 @@ var Pass = compositor.Pass;
 
 import halton from './halton';
 
-function TemporalSuperSampling () {
+import TAAGLSLCode from './TAA.glsl.js';
+
+Shader.import(TAAGLSLCode);
+
+function TemporalSuperSampling (opt) {
+    opt = opt || {};
     var haltonSequence = [];
 
     for (var i = 0; i < 30; i++) {
@@ -26,13 +31,15 @@ function TemporalSuperSampling () {
     this._prevFrameTex = new Texture2D();
     this._outputTex = new Texture2D();
 
-    var blendPass = this._blendPass = new Pass({
-        fragment: Shader.source('clay.compositor.blend')
+    var taaPass = this._taaPass = new Pass({
+        fragment: Shader.source('car.taa')
     });
-    blendPass.material.disableTexturesAll();
-    blendPass.material.enableTexture(['texture1', 'texture2']);
+    taaPass.setUniform('velocityTex', opt.velocityTexture);
+    taaPass.setUniform('depthTex', opt.depthTexture);
 
-    this._blendFb = new FrameBuffer({
+    this._depthTex = opt.depthTexture;
+
+    this._taaFb = new FrameBuffer({
         depthBuffer: false
     });
 
@@ -120,24 +127,28 @@ TemporalSuperSampling.prototype = {
         return this._frame >= this._haltonSequence.length;
     },
 
-    render: function (renderer) {
-        var blendPass = this._blendPass;
-        if (this._frame === 0) {
-            // Direct output
-            blendPass.setUniform('weight1', 0);
-            blendPass.setUniform('weight2', 1);
-        }
-        else {
-            blendPass.setUniform('weight1', 0.9);
-            blendPass.setUniform('weight2', 0.1);
-        }
-        blendPass.setUniform('texture1', this._prevFrameTex);
-        blendPass.setUniform('texture2', this._sourceTex);
+    render: function (renderer, camera) {
+        var taaPass = this._taaPass;
+        // if (this._frame === 0) {
+        //     // Direct output
+        //     taaPass.setUniform('weight1', 0);
+        //     taaPass.setUniform('weight2', 1);
+        // }
+        // else {
+        // taaPass.setUniform('weight1', 0.9);
+        // taaPass.setUniform('weight2', 0.1);
+        // }
+        taaPass.setUniform('prevTex', this._prevFrameTex);
+        taaPass.setUniform('currTex', this._sourceTex);
+        taaPass.setUniform('texelSize', [1 / this._sourceTex.width, 1 / this._sourceTex.width]);
+        taaPass.setUniform('depthTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.width]);
+        taaPass.setUniform('sinTime', Math.sin(+(new Date()) / 8));
+        taaPass.setUniform('projection', camera.projectionMatrix.array);
 
-        this._blendFb.attach(this._outputTex);
-        this._blendFb.bind(renderer);
-        blendPass.render(renderer);
-        this._blendFb.unbind(renderer);
+        this._taaFb.attach(this._outputTex);
+        this._taaFb.bind(renderer);
+        taaPass.render(renderer);
+        this._taaFb.unbind(renderer);
 
         this._outputPass.setUniform('texture', this._outputTex);
         this._outputPass.render(renderer);
@@ -152,12 +163,12 @@ TemporalSuperSampling.prototype = {
 
     dispose: function (renderer) {
         this._sourceFb.dispose(renderer);
-        this._blendFb.dispose(renderer);
+        this._taaFb.dispose(renderer);
         this._prevFrameTex.dispose(renderer);
         this._outputTex.dispose(renderer);
         this._sourceTex.dispose(renderer);
         this._outputPass.dispose(renderer);
-        this._blendPass.dispose(renderer);
+        this._taaPass.dispose(renderer);
     }
 };
 

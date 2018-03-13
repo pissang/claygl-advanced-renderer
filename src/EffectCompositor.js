@@ -42,7 +42,8 @@ function EffectCompositor() {
 
     this._gBufferPass = new GBuffer({
         renderTransparent: true,
-        enableTargetTexture3: false
+        enableTargetTexture3: false,
+        enableTargetTexture4: true
     });
 
     this._compositor = createCompositor(effectJson);
@@ -211,6 +212,13 @@ EffectCompositor.prototype.getSourceFrameBuffer = function () {
  */
 EffectCompositor.prototype.getSourceTexture = function () {
     return this._sourceTexture;
+};
+
+EffectCompositor.prototype.getVelocityTexture = function () {
+    return this._gBufferPass.getTargetTexture4();
+};
+EffectCompositor.prototype.getDepthTexture = function () {
+    return this._gBufferPass.getTargetTexture2();
 };
 
 /**

@@ -29,15 +29,15 @@ function SSRPass(opt) {
     opt = opt || {};
 
     this._ssrPass = new Pass({
-        fragment: Shader.source('ecgl.ssr.main'),
+        fragment: Shader.source('car.ssr.main'),
         clearColor: [0, 0, 0, 0]
     });
     this._blurPass1 = new Pass({
-        fragment: Shader.source('ecgl.ssr.blur'),
+        fragment: Shader.source('car.ssr.blur'),
         clearColor: [0, 0, 0, 0]
     });
     this._blurPass2 = new Pass({
-        fragment: Shader.source('ecgl.ssr.blur'),
+        fragment: Shader.source('car.ssr.blur'),
         clearColor: [0, 0, 0, 0]
     });
     this._blendPass = new Pass({

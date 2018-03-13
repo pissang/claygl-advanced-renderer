@@ -1,4 +1,4 @@
-@export ecgl.ssao.estimate
+@export car.ssao.estimate
 
 #define SHADER_NAME SSAO
 
@@ -129,7 +129,7 @@ void main()
 @end
 
 
-@export ecgl.ssao.blur
+@export car.ssao.blur
 #define SHADER_NAME SSAO_BLUR
 
 uniform sampler2D ssaoTexture;

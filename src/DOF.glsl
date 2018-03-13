@@ -1,4 +1,4 @@
-@export ecgl.dof.coc
+@export car.dof.coc
 
 uniform sampler2D depth;
 
@@ -57,7 +57,7 @@ void main()
 @end
 
 
-@export ecgl.dof.composite
+@export car.dof.composite
 
 #define DEBUG 0
 
@@ -120,7 +120,7 @@ void main()
 
 
 
-@export ecgl.dof.diskBlur
+@export car.dof.diskBlur
 
 #define POISSON_KERNEL_SIZE 16;
 
