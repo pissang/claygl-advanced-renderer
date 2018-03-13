@@ -6,7 +6,6 @@
 
 #define FLT_EPS 0.00000001
 #define MINMAX_3X3
-#define USE_YCOCG
 #define USE_CLIPPING
 #define USE_DILATION
 
@@ -15,6 +14,7 @@ uniform sampler2D currTex;
 uniform sampler2D velocityTex;
 uniform sampler2D depthTex;
 
+uniform bool still;
 
 uniform float sinTime;
 
@@ -338,6 +338,12 @@ vec4 temporal_reprojection(vec2 ss_txc, vec2 ss_vel, float vs_dist)
 void main()
 {
     vec2 uv = v_Texcoord;
+
+    if (still) {
+        gl_FragColor = mix(texture2D(currTex, uv), texture2D(prevTex, uv), 0.9);
+        return;
+    }
+
 #ifdef USE_DILATION
     //--- 3x3 norm (sucks)
     //vec2 ss_vel = sample_velocity_dilated(velocityTex, uv, 1);

@@ -2,8 +2,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- <script src="../../claygl/dist/claygl.js"></script> -->
-    <script src="https://rawgit.com/pissang/claygl/master/dist/claygl.min.js"></script>
+    <script src="../../claygl/dist/claygl.js"></script>
+    <!-- <script src="https://rawgit.com/pissang/claygl/master/dist/claygl.min.js"></script> -->
     <script src="../dist/claygl-advanced-renderer.js"></script>
 </head>
 <body>
@@ -14,6 +14,8 @@
             width: window.innerWidth,
             height: window.innerHeight,
 
+            devicePixelRatio: 1,
+
             autoRender: false,
 
             init: function (app) {
@@ -21,10 +23,9 @@
                     shadow: true,
                     postEffect: {
                         screenSpaceAmbientOcclusion: {
-                            enable: true
-                        },
-                        screenSpaceReflection: {
-                            enable: true
+                            enable: true,
+                            // intensity: 2,
+                            radius: 2
                         }
                     }
                 });
@@ -51,6 +52,16 @@
                 app.createAmbientLight('#fff', 0.2);
 
                 this._advancedRenderer.render();
+
+                this._control = new clay.plugin.OrbitControl({
+                    target: this._camera,
+                    domElement: app.container,
+                    timeline: app.timeline
+                });
+
+                this._control.on('update', function () {
+                    this._advancedRenderer.render();
+                }, this);
             }
         })
     </script>

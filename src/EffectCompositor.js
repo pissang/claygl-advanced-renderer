@@ -6,11 +6,14 @@ import poissonKernel from './poissonKernel';
 
 import effectJson from './composite.js';
 
-import dofGLSL from './DOF.glsl.js';
+import dofCode from './DOF.glsl.js';
+import temporalBlendCode from './temporalBlend.glsl.js';
 
 var GBuffer = deferred.GBuffer;
 
-Shader['import'](dofGLSL);
+Shader.import(dofCode);
+
+Shader.import(temporalBlendCode);
 
 var commonOutputs = {
     color: {
@@ -71,7 +74,8 @@ function EffectCompositor() {
     var gBufferObj = {
         normalTexture: this._gBufferPass.getTargetTexture1(),
         depthTexture: this._gBufferPass.getTargetTexture2(),
-        albedoTexture: this._gBufferPass.getTargetTexture3()
+        albedoTexture: this._gBufferPass.getTargetTexture3(),
+        velocityTexture: this._gBufferPass.getTargetTexture4()
     };
     this._ssaoPass = new SSAOPass(gBufferObj);
     this._ssrPass = new SSRPass(gBufferObj);

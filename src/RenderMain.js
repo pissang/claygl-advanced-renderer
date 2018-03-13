@@ -165,16 +165,16 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
         this.afterRenderScene(renderer, scene, camera);
         frameBuffer.unbind(renderer);
 
-        // if (this.needsTemporalSS() && accumulating) {
+        if (this.needsTemporalSS()) {
             this._compositor.composite(renderer, scene, camera, this._temporalSS.getSourceFrameBuffer(), this._temporalSS.getFrame());
-            this._temporalSS.render(renderer, camera);
-        // }
-        // else {
-        //     this._compositor.composite(renderer, scene, camera, null, 0);
-        // }
+            this._temporalSS.render(renderer, camera, accumulating);
+        }
+        else {
+            this._compositor.composite(renderer, scene, camera, null, 0);
+        }
     }
     else {
-        // if (this.needsTemporalSS() && accumulating) {
+        if (this.needsTemporalSS()) {
             frameBuffer = this._temporalSS.getSourceFrameBuffer();
             frameBuffer.bind(renderer);
             renderer.saveClear();
@@ -183,12 +183,12 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
             this.afterRenderScene(renderer, scene, camera);
             renderer.restoreClear();
             frameBuffer.unbind(renderer);
-            this._temporalSS.render(renderer, camera);
-        // }
-        // else {
-        //     renderer.render(scene, camera, true, this.preZ);
-        //     this.afterRenderScene(renderer, scene, camera);
-        // }
+            this._temporalSS.render(renderer, camera, accumulating);
+        }
+        else {
+            renderer.render(scene, camera, true, this.preZ);
+            this.afterRenderScene(renderer, scene, camera);
+        }
     }
 
     this.afterRenderAll(renderer, scene, camera);

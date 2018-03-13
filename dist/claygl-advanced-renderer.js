@@ -19,7 +19,7 @@ function halton(index, base) {
     return result;
 }
 
-var SSAOGLSLCode = "@export ecgl.ssao.estimate\n#define SHADER_NAME SSAO\nuniform sampler2D depthTex;\nuniform sampler2D normalTex;\nuniform sampler2D noiseTex;\nuniform vec2 depthTexSize;\nuniform vec2 noiseTexSize;\nuniform mat4 projection;\nuniform mat4 projectionInv;\nuniform mat4 viewInverseTranspose;\nuniform vec3 kernel[KERNEL_SIZE];\nuniform float radius : 1;\nuniform float power : 1;\nuniform float bias: 0.01;\nuniform float intensity: 1.0;\nvarying vec2 v_Texcoord;\nfloat ssaoEstimator(in vec3 originPos, in vec3 N, in mat3 kernelBasis) {\n float occlusion = 0.0;\n for (int i = 0; i < KERNEL_SIZE; i++) {\n vec3 samplePos = kernel[i];\n#ifdef NORMALTEX_ENABLED\n samplePos = kernelBasis * samplePos;\n#endif\n samplePos = samplePos * radius + originPos;\n vec4 texCoord = projection * vec4(samplePos, 1.0);\n texCoord.xy /= texCoord.w;\n texCoord.xy = texCoord.xy * 0.5 + 0.5;\n vec4 depthTexel = texture2D(depthTex, texCoord.xy);\n float z = depthTexel.r * 2.0 - 1.0;\n#ifdef ALCHEMY\n vec4 projectedPos = vec4(texCoord.xy * 2.0 - 1.0, z, 1.0);\n vec4 p4 = projectionInv * projectedPos;\n p4.xyz /= p4.w;\n vec3 cDir = p4.xyz - originPos;\n float vv = dot(cDir, cDir);\n float vn = dot(cDir, N);\n float radius2 = radius * radius;\n vn = max(vn + p4.z * bias, 0.0);\n float f = max(radius2 - vv, 0.0) / radius2;\n occlusion += f * f * f * max(vn / (0.01 + vv), 0.0);\n#else\n if (projection[3][3] == 0.0) {\n z = projection[3][2] / (z * projection[2][3] - projection[2][2]);\n }\n else {\n z = (z - projection[3][2]) / projection[2][2];\n }\n float factor = step(samplePos.z, z - bias);\n float rangeCheck = smoothstep(0.0, 1.0, radius / abs(originPos.z - z));\n occlusion += rangeCheck * factor;\n#endif\n }\n#ifdef NORMALTEX_ENABLED\n occlusion = 1.0 - occlusion / float(KERNEL_SIZE);\n#else\n occlusion = 1.0 - clamp((occlusion / float(KERNEL_SIZE) - 0.6) * 2.5, 0.0, 1.0);\n#endif\n return pow(occlusion, power);\n}\nvoid main()\n{\n vec4 depthTexel = texture2D(depthTex, v_Texcoord);\n#ifdef NORMALTEX_ENABLED\n vec4 tex = texture2D(normalTex, v_Texcoord);\n if (dot(tex.rgb, tex.rgb) == 0.0) {\n gl_FragColor = vec4(1.0);\n return;\n }\n vec3 N = tex.rgb * 2.0 - 1.0;\n N = (viewInverseTranspose * vec4(N, 0.0)).xyz;\n vec2 noiseTexCoord = depthTexSize / vec2(noiseTexSize) * v_Texcoord;\n vec3 rvec = texture2D(noiseTex, noiseTexCoord).rgb * 2.0 - 1.0;\n vec3 T = normalize(rvec - N * dot(rvec, N));\n vec3 BT = normalize(cross(N, T));\n mat3 kernelBasis = mat3(T, BT, N);\n#else\n if (depthTexel.r > 0.99999) {\n gl_FragColor = vec4(1.0);\n return;\n }\n mat3 kernelBasis;\n#endif\n float z = depthTexel.r * 2.0 - 1.0;\n vec4 projectedPos = vec4(v_Texcoord * 2.0 - 1.0, z, 1.0);\n vec4 p4 = projectionInv * projectedPos;\n vec3 position = p4.xyz / p4.w;\n float ao = ssaoEstimator(position, N, kernelBasis);\n ao = clamp(1.0 - (1.0 - ao) * intensity, 0.0, 1.0);\n gl_FragColor = vec4(vec3(ao), 1.0);\n}\n@end\n@export ecgl.ssao.blur\n#define SHADER_NAME SSAO_BLUR\nuniform sampler2D ssaoTexture;\n#ifdef NORMALTEX_ENABLED\nuniform sampler2D normalTex;\n#endif\nvarying vec2 v_Texcoord;\nuniform vec2 textureSize;\nuniform float blurSize : 1.0;\nuniform int direction: 0.0;\n#ifdef DEPTHTEX_ENABLED\nuniform sampler2D depthTex;\nuniform mat4 projection;\nuniform float depthRange : 0.05;\nfloat getLinearDepth(vec2 coord)\n{\n float depth = texture2D(depthTex, coord).r * 2.0 - 1.0;\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n}\n#endif\nvoid main()\n{\n float kernel[5];\n kernel[0] = 0.122581;\n kernel[1] = 0.233062;\n kernel[2] = 0.288713;\n kernel[3] = 0.233062;\n kernel[4] = 0.122581;\n vec2 off = vec2(0.0);\n if (direction == 0) {\n off[0] = blurSize / textureSize.x;\n }\n else {\n off[1] = blurSize / textureSize.y;\n }\n vec2 coord = v_Texcoord;\n float sum = 0.0;\n float weightAll = 0.0;\n#ifdef NORMALTEX_ENABLED\n vec3 centerNormal = texture2D(normalTex, v_Texcoord).rgb * 2.0 - 1.0;\n#endif\n#if defined(DEPTHTEX_ENABLED)\n float centerDepth = getLinearDepth(v_Texcoord);\n#endif\n for (int i = 0; i < 5; i++) {\n vec2 coord = clamp(v_Texcoord + vec2(float(i) - 2.0) * off, vec2(0.0), vec2(1.0));\n float w = kernel[i];\n#ifdef NORMALTEX_ENABLED\n vec3 normal = texture2D(normalTex, coord).rgb * 2.0 - 1.0;\n w *= clamp(dot(normal, centerNormal), 0.0, 1.0);\n#endif\n#ifdef DEPTHTEX_ENABLED\n float d = getLinearDepth(coord);\n w *= (1.0 - smoothstep(abs(centerDepth - d) / depthRange, 0.0, 1.0));\n#endif\n weightAll += w;\n sum += texture2D(ssaoTexture, coord).r * w;\n }\n gl_FragColor = vec4(vec3(sum / weightAll), 1.0);\n}\n@end\n";
+var SSAOGLSLCode = "@export car.ssao.estimate\n#define SHADER_NAME SSAO\nuniform sampler2D depthTex;\nuniform sampler2D normalTex;\nuniform sampler2D noiseTex;\nuniform vec2 depthTexSize;\nuniform vec2 noiseTexSize;\nuniform mat4 projection;\nuniform mat4 projectionInv;\nuniform mat4 viewInverseTranspose;\nuniform vec3 kernel[KERNEL_SIZE];\nuniform float radius : 1;\nuniform float power : 1;\nuniform float bias: 0.01;\nuniform float intensity: 1.0;\nvarying vec2 v_Texcoord;\nfloat ssaoEstimator(in vec3 originPos, in vec3 N, in mat3 kernelBasis) {\n float occlusion = 0.0;\n for (int i = 0; i < KERNEL_SIZE; i++) {\n vec3 samplePos = kernel[i];\n#ifdef NORMALTEX_ENABLED\n samplePos = kernelBasis * samplePos;\n#endif\n samplePos = samplePos * radius + originPos;\n vec4 texCoord = projection * vec4(samplePos, 1.0);\n texCoord.xy /= texCoord.w;\n texCoord.xy = texCoord.xy * 0.5 + 0.5;\n vec4 depthTexel = texture2D(depthTex, texCoord.xy);\n float z = depthTexel.r * 2.0 - 1.0;\n#ifdef ALCHEMY\n vec4 projectedPos = vec4(texCoord.xy * 2.0 - 1.0, z, 1.0);\n vec4 p4 = projectionInv * projectedPos;\n p4.xyz /= p4.w;\n vec3 cDir = p4.xyz - originPos;\n float vv = dot(cDir, cDir);\n float vn = dot(cDir, N);\n float radius2 = radius * radius;\n vn = max(vn + p4.z * bias, 0.0);\n float f = max(radius2 - vv, 0.0) / radius2;\n occlusion += f * f * f * max(vn / (0.01 + vv), 0.0);\n#else\n if (projection[3][3] == 0.0) {\n z = projection[3][2] / (z * projection[2][3] - projection[2][2]);\n }\n else {\n z = (z - projection[3][2]) / projection[2][2];\n }\n float factor = step(samplePos.z, z - bias);\n float rangeCheck = smoothstep(0.0, 1.0, radius / abs(originPos.z - z));\n occlusion += rangeCheck * factor;\n#endif\n }\n#ifdef NORMALTEX_ENABLED\n occlusion = 1.0 - occlusion / float(KERNEL_SIZE);\n#else\n occlusion = 1.0 - clamp((occlusion / float(KERNEL_SIZE) - 0.6) * 2.5, 0.0, 1.0);\n#endif\n return pow(occlusion, power);\n}\nvoid main()\n{\n vec4 depthTexel = texture2D(depthTex, v_Texcoord);\n#ifdef NORMALTEX_ENABLED\n vec4 tex = texture2D(normalTex, v_Texcoord);\n if (dot(tex.rgb, tex.rgb) == 0.0) {\n gl_FragColor = vec4(1.0);\n return;\n }\n vec3 N = tex.rgb * 2.0 - 1.0;\n N = (viewInverseTranspose * vec4(N, 0.0)).xyz;\n vec2 noiseTexCoord = depthTexSize / vec2(noiseTexSize) * v_Texcoord;\n vec3 rvec = texture2D(noiseTex, noiseTexCoord).rgb * 2.0 - 1.0;\n vec3 T = normalize(rvec - N * dot(rvec, N));\n vec3 BT = normalize(cross(N, T));\n mat3 kernelBasis = mat3(T, BT, N);\n#else\n if (depthTexel.r > 0.99999) {\n gl_FragColor = vec4(1.0);\n return;\n }\n mat3 kernelBasis;\n#endif\n float z = depthTexel.r * 2.0 - 1.0;\n vec4 projectedPos = vec4(v_Texcoord * 2.0 - 1.0, z, 1.0);\n vec4 p4 = projectionInv * projectedPos;\n vec3 position = p4.xyz / p4.w;\n float ao = ssaoEstimator(position, N, kernelBasis);\n ao = clamp(1.0 - (1.0 - ao) * intensity, 0.0, 1.0);\n gl_FragColor = vec4(vec3(ao), 1.0);\n}\n@end\n@export car.ssao.blur\n#define SHADER_NAME SSAO_BLUR\nuniform sampler2D ssaoTexture;\n#ifdef NORMALTEX_ENABLED\nuniform sampler2D normalTex;\n#endif\nvarying vec2 v_Texcoord;\nuniform vec2 textureSize;\nuniform float blurSize : 1.0;\nuniform int direction: 0.0;\n#ifdef DEPTHTEX_ENABLED\nuniform sampler2D depthTex;\nuniform mat4 projection;\nuniform float depthRange : 0.05;\nfloat getLinearDepth(vec2 coord)\n{\n float depth = texture2D(depthTex, coord).r * 2.0 - 1.0;\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n}\n#endif\nvoid main()\n{\n float kernel[5];\n kernel[0] = 0.122581;\n kernel[1] = 0.233062;\n kernel[2] = 0.288713;\n kernel[3] = 0.233062;\n kernel[4] = 0.122581;\n vec2 off = vec2(0.0);\n if (direction == 0) {\n off[0] = blurSize / textureSize.x;\n }\n else {\n off[1] = blurSize / textureSize.y;\n }\n vec2 coord = v_Texcoord;\n float sum = 0.0;\n float weightAll = 0.0;\n#ifdef NORMALTEX_ENABLED\n vec3 centerNormal = texture2D(normalTex, v_Texcoord).rgb * 2.0 - 1.0;\n#endif\n#if defined(DEPTHTEX_ENABLED)\n float centerDepth = getLinearDepth(v_Texcoord);\n#endif\n for (int i = 0; i < 5; i++) {\n vec2 coord = clamp(v_Texcoord + vec2(float(i) - 2.0) * off, vec2(0.0), vec2(1.0));\n float w = kernel[i];\n#ifdef NORMALTEX_ENABLED\n vec3 normal = texture2D(normalTex, coord).rgb * 2.0 - 1.0;\n w *= clamp(dot(normal, centerNormal), 0.0, 1.0);\n#endif\n#ifdef DEPTHTEX_ENABLED\n float d = getLinearDepth(coord);\n w *= (1.0 - smoothstep(abs(centerDepth - d) / depthRange, 0.0, 1.0));\n#endif\n weightAll += w;\n sum += texture2D(ssaoTexture, coord).r * w;\n }\n gl_FragColor = vec4(vec3(sum / weightAll), 1.0);\n}\n@end\n";
 
 var Pass = claygl.compositor.Pass;
 claygl.Shader.import(SSAOGLSLCode);
@@ -73,18 +73,26 @@ function SSAOPass(opt) {
     opt = opt || {};
 
     this._ssaoPass = new Pass({
-        fragment: claygl.Shader.source('ecgl.ssao.estimate')
+        fragment: claygl.Shader.source('car.ssao.estimate')
+    });
+    this._blendPass = new Pass({
+        fragment: claygl.Shader.source('car.temporalBlend')
     });
     this._blurPass = new Pass({
-        fragment: claygl.Shader.source('ecgl.ssao.blur')
+        fragment: claygl.Shader.source('car.ssao.blur')
     });
     this._framebuffer = new claygl.FrameBuffer();
 
     this._ssaoTexture = new claygl.Texture2D();
+
+    this._prevTexture = new claygl.Texture2D();
+    this._currTexture = new claygl.Texture2D();
+
     this._blurTexture = new claygl.Texture2D();
 
     this._depthTex = opt.depthTexture;
     this._normalTex = opt.normalTexture;
+    this._velocityTex = opt.velocityTexture;
 
     this.setNoiseSize(4);
     this.setKernelSize(opt.kernelSize || 12);
@@ -119,11 +127,13 @@ SSAOPass.prototype.setNormalTexture = function (normalTex) {
 };
 
 SSAOPass.prototype.update = function (renderer, camera$$1, frame) {
+
     var width = renderer.getWidth();
     var height = renderer.getHeight();
 
     var ssaoPass = this._ssaoPass;
     var blurPass = this._blurPass;
+    var blendPass = this._blendPass;
 
     ssaoPass.setUniform('kernel', this._kernels[frame % this._kernels.length]);
     ssaoPass.setUniform('depthTex', this._depthTex);
@@ -142,16 +152,29 @@ SSAOPass.prototype.update = function (renderer, camera$$1, frame) {
     var ssaoTexture = this._ssaoTexture;
     var blurTexture = this._blurTexture;
 
+    var prevTexture = this._prevTexture;
+    var currTexture = this._currTexture;
+
     ssaoTexture.width = width;
     ssaoTexture.height = height;
     blurTexture.width = width;
     blurTexture.height = height;
+    prevTexture.width = width;
+    prevTexture.height = height;
+    currTexture.width = width;
+    currTexture.height = height;
 
     this._framebuffer.attach(ssaoTexture);
     this._framebuffer.bind(renderer);
     renderer.gl.clearColor(1, 1, 1, 1);
     renderer.gl.clear(renderer.gl.COLOR_BUFFER_BIT);
     ssaoPass.render(renderer);
+
+    // this._framebuffer.attach(currTexture);
+    // blendPass.setUniform('prevTex', prevTexture);
+    // blendPass.setUniform('currTex', ssaoTexture);
+    // blendPass.setUniform('velocityTex', this._velocityTex);
+    // blendPass.render(renderer);
 
     blurPass.setUniform('textureSize', [width, height]);
     blurPass.setUniform('projection', camera$$1.projectionMatrix.array);
@@ -170,6 +193,12 @@ SSAOPass.prototype.update = function (renderer, camera$$1, frame) {
     // Restore clear
     var clearColor = renderer.clearColor;
     renderer.gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
+
+    // Swap texture
+
+    // var tmp = this._prevTexture;
+    // this._prevTexture = this._currTexture;
+    // this._currTexture = tmp;
 };
 
 SSAOPass.prototype.getTargetTexture = function () {
@@ -224,7 +253,7 @@ SSAOPass.prototype.isFinished = function (frame) {
     return frame > 30;
 };
 
-var SSRGLSLCode = "@export ecgl.ssr.main\n#define SHADER_NAME SSR\n#define MAX_ITERATION 20;\n#define SAMPLE_PER_FRAME 5;\n#define TOTAL_SAMPLES 128;\nuniform sampler2D sourceTexture;\nuniform sampler2D gBufferTexture1;\nuniform sampler2D gBufferTexture2;\nuniform sampler2D gBufferTexture3;\nuniform samplerCube specularCubemap;\nuniform sampler2D brdfLookup;\nuniform float specularIntensity: 1;\nuniform mat4 projection;\nuniform mat4 projectionInv;\nuniform mat4 toViewSpace;\nuniform mat4 toWorldSpace;\nuniform float maxRayDistance: 200;\nuniform float pixelStride: 16;\nuniform float pixelStrideZCutoff: 50;\nuniform float screenEdgeFadeStart: 0.9;\nuniform float eyeFadeStart : 0.2;uniform float eyeFadeEnd: 0.8;\nuniform float minGlossiness: 0.2;uniform float zThicknessThreshold: 1;\nuniform float nearZ;\nuniform vec2 viewportSize : VIEWPORT_SIZE;\nuniform float jitterOffset: 0;\nvarying vec2 v_Texcoord;\n#ifdef DEPTH_DECODE\n@import clay.util.decode_float\n#endif\n#ifdef PHYSICALLY_CORRECT\nuniform sampler2D normalDistribution;\nuniform float sampleOffset: 0;\nuniform vec2 normalDistributionSize;\nvec3 transformNormal(vec3 H, vec3 N) {\n vec3 upVector = N.y > 0.999 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);\n vec3 tangentX = normalize(cross(N, upVector));\n vec3 tangentZ = cross(N, tangentX);\n return normalize(tangentX * H.x + N * H.y + tangentZ * H.z);\n}\nvec3 importanceSampleNormalGGX(float i, float roughness, vec3 N) {\n float p = fract((i + sampleOffset) / float(TOTAL_SAMPLES));\n vec3 H = texture2D(normalDistribution,vec2(roughness, p)).rgb;\n return transformNormal(H, N);\n}\nfloat G_Smith(float g, float ndv, float ndl) {\n float roughness = 1.0 - g;\n float k = roughness * roughness / 2.0;\n float G1V = ndv / (ndv * (1.0 - k) + k);\n float G1L = ndl / (ndl * (1.0 - k) + k);\n return G1L * G1V;\n}\nvec3 F_Schlick(float ndv, vec3 spec) {\n return spec + (1.0 - spec) * pow(1.0 - ndv, 5.0);\n}\n#endif\nfloat fetchDepth(sampler2D depthTexture, vec2 uv)\n{\n vec4 depthTexel = texture2D(depthTexture, uv);\n return depthTexel.r * 2.0 - 1.0;\n}\nfloat linearDepth(float depth)\n{\n if (projection[3][3] == 0.0) {\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n }\n else {\n return (depth - projection[3][2]) / projection[2][2];\n }\n}\nbool rayIntersectDepth(float rayZNear, float rayZFar, vec2 hitPixel)\n{\n if (rayZFar > rayZNear)\n {\n float t = rayZFar; rayZFar = rayZNear; rayZNear = t;\n }\n float cameraZ = linearDepth(fetchDepth(gBufferTexture2, hitPixel));\n return rayZFar <= cameraZ && rayZNear >= cameraZ - zThicknessThreshold;\n}\nbool traceScreenSpaceRay(\n vec3 rayOrigin, vec3 rayDir, float jitter,\n out vec2 hitPixel, out vec3 hitPoint, out float iterationCount\n)\n{\n float rayLength = ((rayOrigin.z + rayDir.z * maxRayDistance) > -nearZ)\n ? (-nearZ - rayOrigin.z) / rayDir.z : maxRayDistance;\n vec3 rayEnd = rayOrigin + rayDir * rayLength;\n vec4 H0 = projection * vec4(rayOrigin, 1.0);\n vec4 H1 = projection * vec4(rayEnd, 1.0);\n float k0 = 1.0 / H0.w, k1 = 1.0 / H1.w;\n vec3 Q0 = rayOrigin * k0, Q1 = rayEnd * k1;\n vec2 P0 = (H0.xy * k0 * 0.5 + 0.5) * viewportSize;\n vec2 P1 = (H1.xy * k1 * 0.5 + 0.5) * viewportSize;\n P1 += dot(P1 - P0, P1 - P0) < 0.0001 ? 0.01 : 0.0;\n vec2 delta = P1 - P0;\n bool permute = false;\n if (abs(delta.x) < abs(delta.y)) {\n permute = true;\n delta = delta.yx;\n P0 = P0.yx;\n P1 = P1.yx;\n }\n float stepDir = sign(delta.x);\n float invdx = stepDir / delta.x;\n vec3 dQ = (Q1 - Q0) * invdx;\n float dk = (k1 - k0) * invdx;\n vec2 dP = vec2(stepDir, delta.y * invdx);\n float strideScaler = 1.0 - min(1.0, -rayOrigin.z / pixelStrideZCutoff);\n float pixStride = 1.0 + strideScaler * pixelStride;\n dP *= pixStride; dQ *= pixStride; dk *= pixStride;\n vec4 pqk = vec4(P0, Q0.z, k0);\n vec4 dPQK = vec4(dP, dQ.z, dk);\n pqk += dPQK * jitter;\n float rayZFar = (dPQK.z * 0.5 + pqk.z) / (dPQK.w * 0.5 + pqk.w);\n float rayZNear;\n bool intersect = false;\n vec2 texelSize = 1.0 / viewportSize;\n iterationCount = 0.0;\n for (int i = 0; i < MAX_ITERATION; i++)\n {\n pqk += dPQK;\n rayZNear = rayZFar;\n rayZFar = (dPQK.z * 0.5 + pqk.z) / (dPQK.w * 0.5 + pqk.w);\n hitPixel = permute ? pqk.yx : pqk.xy;\n hitPixel *= texelSize;\n intersect = rayIntersectDepth(rayZNear, rayZFar, hitPixel);\n iterationCount += 1.0;\n dPQK *= 1.2;\n if (intersect) {\n break;\n }\n }\n Q0.xy += dQ.xy * iterationCount;\n Q0.z = pqk.z;\n hitPoint = Q0 / pqk.w;\n return intersect;\n}\nfloat calculateAlpha(\n float iterationCount, float reflectivity,\n vec2 hitPixel, vec3 hitPoint, float dist, vec3 rayDir\n)\n{\n float alpha = clamp(reflectivity, 0.0, 1.0);\n alpha *= 1.0 - (iterationCount / float(MAX_ITERATION));\n vec2 hitPixelNDC = hitPixel * 2.0 - 1.0;\n float maxDimension = min(1.0, max(abs(hitPixelNDC.x), abs(hitPixelNDC.y)));\n alpha *= 1.0 - max(0.0, maxDimension - screenEdgeFadeStart) / (1.0 - screenEdgeFadeStart);\n float _eyeFadeStart = eyeFadeStart;\n float _eyeFadeEnd = eyeFadeEnd;\n if (_eyeFadeStart > _eyeFadeEnd) {\n float tmp = _eyeFadeEnd;\n _eyeFadeEnd = _eyeFadeStart;\n _eyeFadeStart = tmp;\n }\n float eyeDir = clamp(rayDir.z, _eyeFadeStart, _eyeFadeEnd);\n alpha *= 1.0 - (eyeDir - _eyeFadeStart) / (_eyeFadeEnd - _eyeFadeStart);\n alpha *= 1.0 - clamp(dist / maxRayDistance, 0.0, 1.0);\n return alpha;\n}\n@import clay.util.rand\n@import clay.util.rgbm\nvoid main()\n{\n vec4 normalAndGloss = texture2D(gBufferTexture1, v_Texcoord);\n if (dot(normalAndGloss.rgb, vec3(1.0)) == 0.0) {\n discard;\n }\n float g = normalAndGloss.a;\n#if !defined(PHYSICALLY_CORRECT)\n if (g <= minGlossiness) {\n discard;\n }\n#endif\n float reflectivity = (g - minGlossiness) / (1.0 - minGlossiness);\n vec3 N = normalize(normalAndGloss.rgb * 2.0 - 1.0);\n N = normalize((toViewSpace * vec4(N, 0.0)).xyz);\n vec4 projectedPos = vec4(v_Texcoord * 2.0 - 1.0, fetchDepth(gBufferTexture2, v_Texcoord), 1.0);\n vec4 pos = projectionInv * projectedPos;\n vec3 rayOrigin = pos.xyz / pos.w;\n vec3 V = -normalize(rayOrigin);\n float ndv = clamp(dot(N, V), 0.0, 1.0);\n float iterationCount;\n float jitter = rand(fract(v_Texcoord + jitterOffset));\n vec4 albedoMetalness = texture2D(gBufferTexture3, v_Texcoord);\n vec3 albedo = albedoMetalness.rgb;\n float m = albedoMetalness.a;\n vec3 diffuseColor = albedo * (1.0 - m);\n vec3 spec = mix(vec3(0.04), albedo, m);\n#ifdef PHYSICALLY_CORRECT\n vec4 color = vec4(vec3(0.0), 1.0);\n float jitter2 = rand(fract(v_Texcoord)) * float(TOTAL_SAMPLES);\n for (int i = 0; i < SAMPLE_PER_FRAME; i++) {\n vec3 H = importanceSampleNormalGGX(float(i) + jitter2, 1.0 - g, N);\n vec3 rayDir = normalize(reflect(-V, H));\n#else\n vec3 rayDir = normalize(reflect(-V, N));\n#endif\n vec2 hitPixel;\n vec3 hitPoint;\n bool intersect = traceScreenSpaceRay(rayOrigin, rayDir, jitter, hitPixel, hitPoint, iterationCount);\n float dist = distance(rayOrigin, hitPoint);\n vec3 hitNormal = texture2D(gBufferTexture1, hitPixel).rgb * 2.0 - 1.0;\n hitNormal = normalize((toViewSpace * vec4(hitNormal, 0.0)).xyz);\n#ifdef PHYSICALLY_CORRECT\n float ndl = clamp(dot(N, rayDir), 0.0, 1.0);\n float vdh = clamp(dot(V, H), 0.0, 1.0);\n float ndh = clamp(dot(N, H), 0.0, 1.0);\n vec3 litTexel = vec3(0.0);\n if (dot(hitNormal, rayDir) < 0.0 && intersect) {\n litTexel = texture2D(sourceTexture, hitPixel).rgb;\n litTexel *= pow(clamp(1.0 - dist / 200.0, 0.0, 1.0), 3.0);\n }\n else {\n#ifdef SPECULARCUBEMAP_ENABLED\n vec3 rayDirW = normalize(toWorldSpace * vec4(rayDir, 0.0)).rgb;\n litTexel = RGBMDecode(textureCubeLodEXT(specularCubemap, rayDirW, 0.0), 8.12).rgb * specularIntensity;\n#endif\n }\n color.rgb += ndl * litTexel * (\n F_Schlick(ndl, spec) * G_Smith(g, ndv, ndl) * vdh / (ndh * ndv + 0.001)\n );\n }\n color.rgb /= float(SAMPLE_PER_FRAME);\n#else\n#if !defined(SPECULARCUBEMAP_ENABLED)\n if (dot(hitNormal, rayDir) >= 0.0) {\n discard;\n }\n if (!intersect) {\n discard;\n }\n#endif\n float alpha = clamp(calculateAlpha(iterationCount, reflectivity, hitPixel, hitPoint, dist, rayDir), 0.0, 1.0);\n vec4 color = texture2D(sourceTexture, hitPixel);\n color.rgb *= alpha;\n#ifdef SPECULARCUBEMAP_ENABLED\n vec3 rayDirW = normalize(toWorldSpace * vec4(rayDir, 0.0)).rgb;\n alpha = alpha * (intersect ? 1.0 : 0.0);\n float bias = (1.0 - g) * 5.0;\n vec2 brdfParam2 = texture2D(brdfLookup, vec2(1.0 - g, ndv)).xy;\n color.rgb += (1.0 - alpha)\n * RGBMDecode(textureCubeLodEXT(specularCubemap, rayDirW, bias), 8.12).rgb\n * (spec * brdfParam2.x + brdfParam2.y)\n * specularIntensity;\n#endif\n#endif\n gl_FragColor = encodeHDR(color);\n}\n@end\n@export ecgl.ssr.blur\nuniform sampler2D texture;\nuniform sampler2D gBufferTexture1;\nuniform sampler2D gBufferTexture2;\nuniform mat4 projection;\nuniform float depthRange : 0.05;\nvarying vec2 v_Texcoord;\nuniform vec2 textureSize;\nuniform float blurSize : 1.0;\n#ifdef BLEND\n #ifdef SSAOTEX_ENABLED\nuniform sampler2D ssaoTex;\n #endif\nuniform sampler2D sourceTexture;\n#endif\nfloat getLinearDepth(vec2 coord)\n{\n float depth = texture2D(gBufferTexture2, coord).r * 2.0 - 1.0;\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n}\n@import clay.util.rgbm\nvoid main()\n{\n @import clay.compositor.kernel.gaussian_9\n vec4 centerNTexel = texture2D(gBufferTexture1, v_Texcoord);\n float g = centerNTexel.a;\n float maxBlurSize = clamp(1.0 - g, 0.0, 1.0) * blurSize;\n#ifdef VERTICAL\n vec2 off = vec2(0.0, maxBlurSize / textureSize.y);\n#else\n vec2 off = vec2(maxBlurSize / textureSize.x, 0.0);\n#endif\n vec2 coord = v_Texcoord;\n vec4 sum = vec4(0.0);\n float weightAll = 0.0;\n vec3 cN = centerNTexel.rgb * 2.0 - 1.0;\n float cD = getLinearDepth(v_Texcoord);\n for (int i = 0; i < 9; i++) {\n vec2 coord = clamp((float(i) - 4.0) * off + v_Texcoord, vec2(0.0), vec2(1.0));\n float w = gaussianKernel[i]\n * clamp(dot(cN, texture2D(gBufferTexture1, coord).rgb * 2.0 - 1.0), 0.0, 1.0);\n float d = getLinearDepth(coord);\n w *= (1.0 - smoothstep(abs(cD - d) / depthRange, 0.0, 1.0));\n weightAll += w;\n sum += decodeHDR(texture2D(texture, coord)) * w;\n }\n#ifdef BLEND\n float aoFactor = 1.0;\n #ifdef SSAOTEX_ENABLED\n aoFactor = texture2D(ssaoTex, v_Texcoord).r;\n #endif\n gl_FragColor = encodeHDR(\n sum / weightAll * aoFactor + decodeHDR(texture2D(sourceTexture, v_Texcoord))\n );\n#else\n gl_FragColor = encodeHDR(sum / weightAll);\n#endif\n}\n@end";
+var SSRGLSLCode = "@export car.ssr.main\n#define SHADER_NAME SSR\n#define MAX_ITERATION 20;\n#define SAMPLE_PER_FRAME 5;\n#define TOTAL_SAMPLES 128;\nuniform sampler2D sourceTexture;\nuniform sampler2D gBufferTexture1;\nuniform sampler2D gBufferTexture2;\nuniform sampler2D gBufferTexture3;\nuniform samplerCube specularCubemap;\nuniform sampler2D brdfLookup;\nuniform float specularIntensity: 1;\nuniform mat4 projection;\nuniform mat4 projectionInv;\nuniform mat4 toViewSpace;\nuniform mat4 toWorldSpace;\nuniform float maxRayDistance: 200;\nuniform float pixelStride: 16;\nuniform float pixelStrideZCutoff: 50;\nuniform float screenEdgeFadeStart: 0.9;\nuniform float eyeFadeStart : 0.2;uniform float eyeFadeEnd: 0.8;\nuniform float minGlossiness: 0.2;uniform float zThicknessThreshold: 1;\nuniform float nearZ;\nuniform vec2 viewportSize : VIEWPORT_SIZE;\nuniform float jitterOffset: 0;\nvarying vec2 v_Texcoord;\n#ifdef DEPTH_DECODE\n@import clay.util.decode_float\n#endif\n#ifdef PHYSICALLY_CORRECT\nuniform sampler2D normalDistribution;\nuniform float sampleOffset: 0;\nuniform vec2 normalDistributionSize;\nvec3 transformNormal(vec3 H, vec3 N) {\n vec3 upVector = N.y > 0.999 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);\n vec3 tangentX = normalize(cross(N, upVector));\n vec3 tangentZ = cross(N, tangentX);\n return normalize(tangentX * H.x + N * H.y + tangentZ * H.z);\n}\nvec3 importanceSampleNormalGGX(float i, float roughness, vec3 N) {\n float p = fract((i + sampleOffset) / float(TOTAL_SAMPLES));\n vec3 H = texture2D(normalDistribution,vec2(roughness, p)).rgb;\n return transformNormal(H, N);\n}\nfloat G_Smith(float g, float ndv, float ndl) {\n float roughness = 1.0 - g;\n float k = roughness * roughness / 2.0;\n float G1V = ndv / (ndv * (1.0 - k) + k);\n float G1L = ndl / (ndl * (1.0 - k) + k);\n return G1L * G1V;\n}\nvec3 F_Schlick(float ndv, vec3 spec) {\n return spec + (1.0 - spec) * pow(1.0 - ndv, 5.0);\n}\n#endif\nfloat fetchDepth(sampler2D depthTexture, vec2 uv)\n{\n vec4 depthTexel = texture2D(depthTexture, uv);\n return depthTexel.r * 2.0 - 1.0;\n}\nfloat linearDepth(float depth)\n{\n if (projection[3][3] == 0.0) {\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n }\n else {\n return (depth - projection[3][2]) / projection[2][2];\n }\n}\nbool rayIntersectDepth(float rayZNear, float rayZFar, vec2 hitPixel)\n{\n if (rayZFar > rayZNear)\n {\n float t = rayZFar; rayZFar = rayZNear; rayZNear = t;\n }\n float cameraZ = linearDepth(fetchDepth(gBufferTexture2, hitPixel));\n return rayZFar <= cameraZ && rayZNear >= cameraZ - zThicknessThreshold;\n}\nbool traceScreenSpaceRay(\n vec3 rayOrigin, vec3 rayDir, float jitter,\n out vec2 hitPixel, out vec3 hitPoint, out float iterationCount\n)\n{\n float rayLength = ((rayOrigin.z + rayDir.z * maxRayDistance) > -nearZ)\n ? (-nearZ - rayOrigin.z) / rayDir.z : maxRayDistance;\n vec3 rayEnd = rayOrigin + rayDir * rayLength;\n vec4 H0 = projection * vec4(rayOrigin, 1.0);\n vec4 H1 = projection * vec4(rayEnd, 1.0);\n float k0 = 1.0 / H0.w, k1 = 1.0 / H1.w;\n vec3 Q0 = rayOrigin * k0, Q1 = rayEnd * k1;\n vec2 P0 = (H0.xy * k0 * 0.5 + 0.5) * viewportSize;\n vec2 P1 = (H1.xy * k1 * 0.5 + 0.5) * viewportSize;\n P1 += dot(P1 - P0, P1 - P0) < 0.0001 ? 0.01 : 0.0;\n vec2 delta = P1 - P0;\n bool permute = false;\n if (abs(delta.x) < abs(delta.y)) {\n permute = true;\n delta = delta.yx;\n P0 = P0.yx;\n P1 = P1.yx;\n }\n float stepDir = sign(delta.x);\n float invdx = stepDir / delta.x;\n vec3 dQ = (Q1 - Q0) * invdx;\n float dk = (k1 - k0) * invdx;\n vec2 dP = vec2(stepDir, delta.y * invdx);\n float strideScaler = 1.0 - min(1.0, -rayOrigin.z / pixelStrideZCutoff);\n float pixStride = 1.0 + strideScaler * pixelStride;\n dP *= pixStride; dQ *= pixStride; dk *= pixStride;\n vec4 pqk = vec4(P0, Q0.z, k0);\n vec4 dPQK = vec4(dP, dQ.z, dk);\n pqk += dPQK * jitter;\n float rayZFar = (dPQK.z * 0.5 + pqk.z) / (dPQK.w * 0.5 + pqk.w);\n float rayZNear;\n bool intersect = false;\n vec2 texelSize = 1.0 / viewportSize;\n iterationCount = 0.0;\n for (int i = 0; i < MAX_ITERATION; i++)\n {\n pqk += dPQK;\n rayZNear = rayZFar;\n rayZFar = (dPQK.z * 0.5 + pqk.z) / (dPQK.w * 0.5 + pqk.w);\n hitPixel = permute ? pqk.yx : pqk.xy;\n hitPixel *= texelSize;\n intersect = rayIntersectDepth(rayZNear, rayZFar, hitPixel);\n iterationCount += 1.0;\n dPQK *= 1.2;\n if (intersect) {\n break;\n }\n }\n Q0.xy += dQ.xy * iterationCount;\n Q0.z = pqk.z;\n hitPoint = Q0 / pqk.w;\n return intersect;\n}\nfloat calculateAlpha(\n float iterationCount, float reflectivity,\n vec2 hitPixel, vec3 hitPoint, float dist, vec3 rayDir\n)\n{\n float alpha = clamp(reflectivity, 0.0, 1.0);\n alpha *= 1.0 - (iterationCount / float(MAX_ITERATION));\n vec2 hitPixelNDC = hitPixel * 2.0 - 1.0;\n float maxDimension = min(1.0, max(abs(hitPixelNDC.x), abs(hitPixelNDC.y)));\n alpha *= 1.0 - max(0.0, maxDimension - screenEdgeFadeStart) / (1.0 - screenEdgeFadeStart);\n float _eyeFadeStart = eyeFadeStart;\n float _eyeFadeEnd = eyeFadeEnd;\n if (_eyeFadeStart > _eyeFadeEnd) {\n float tmp = _eyeFadeEnd;\n _eyeFadeEnd = _eyeFadeStart;\n _eyeFadeStart = tmp;\n }\n float eyeDir = clamp(rayDir.z, _eyeFadeStart, _eyeFadeEnd);\n alpha *= 1.0 - (eyeDir - _eyeFadeStart) / (_eyeFadeEnd - _eyeFadeStart);\n alpha *= 1.0 - clamp(dist / maxRayDistance, 0.0, 1.0);\n return alpha;\n}\n@import clay.util.rand\n@import clay.util.rgbm\nvoid main()\n{\n vec4 normalAndGloss = texture2D(gBufferTexture1, v_Texcoord);\n if (dot(normalAndGloss.rgb, vec3(1.0)) == 0.0) {\n discard;\n }\n float g = normalAndGloss.a;\n#if !defined(PHYSICALLY_CORRECT)\n if (g <= minGlossiness) {\n discard;\n }\n#endif\n float reflectivity = (g - minGlossiness) / (1.0 - minGlossiness);\n vec3 N = normalize(normalAndGloss.rgb * 2.0 - 1.0);\n N = normalize((toViewSpace * vec4(N, 0.0)).xyz);\n vec4 projectedPos = vec4(v_Texcoord * 2.0 - 1.0, fetchDepth(gBufferTexture2, v_Texcoord), 1.0);\n vec4 pos = projectionInv * projectedPos;\n vec3 rayOrigin = pos.xyz / pos.w;\n vec3 V = -normalize(rayOrigin);\n float ndv = clamp(dot(N, V), 0.0, 1.0);\n float iterationCount;\n float jitter = rand(fract(v_Texcoord + jitterOffset));\n vec4 albedoMetalness = texture2D(gBufferTexture3, v_Texcoord);\n vec3 albedo = albedoMetalness.rgb;\n float m = albedoMetalness.a;\n vec3 diffuseColor = albedo * (1.0 - m);\n vec3 spec = mix(vec3(0.04), albedo, m);\n#ifdef PHYSICALLY_CORRECT\n vec4 color = vec4(vec3(0.0), 1.0);\n float jitter2 = rand(fract(v_Texcoord)) * float(TOTAL_SAMPLES);\n for (int i = 0; i < SAMPLE_PER_FRAME; i++) {\n vec3 H = importanceSampleNormalGGX(float(i) + jitter2, 1.0 - g, N);\n vec3 rayDir = normalize(reflect(-V, H));\n#else\n vec3 rayDir = normalize(reflect(-V, N));\n#endif\n vec2 hitPixel;\n vec3 hitPoint;\n bool intersect = traceScreenSpaceRay(rayOrigin, rayDir, jitter, hitPixel, hitPoint, iterationCount);\n float dist = distance(rayOrigin, hitPoint);\n vec3 hitNormal = texture2D(gBufferTexture1, hitPixel).rgb * 2.0 - 1.0;\n hitNormal = normalize((toViewSpace * vec4(hitNormal, 0.0)).xyz);\n#ifdef PHYSICALLY_CORRECT\n float ndl = clamp(dot(N, rayDir), 0.0, 1.0);\n float vdh = clamp(dot(V, H), 0.0, 1.0);\n float ndh = clamp(dot(N, H), 0.0, 1.0);\n vec3 litTexel = vec3(0.0);\n if (dot(hitNormal, rayDir) < 0.0 && intersect) {\n litTexel = texture2D(sourceTexture, hitPixel).rgb;\n litTexel *= pow(clamp(1.0 - dist / 200.0, 0.0, 1.0), 3.0);\n }\n else {\n#ifdef SPECULARCUBEMAP_ENABLED\n vec3 rayDirW = normalize(toWorldSpace * vec4(rayDir, 0.0)).rgb;\n litTexel = RGBMDecode(textureCubeLodEXT(specularCubemap, rayDirW, 0.0), 8.12).rgb * specularIntensity;\n#endif\n }\n color.rgb += ndl * litTexel * (\n F_Schlick(ndl, spec) * G_Smith(g, ndv, ndl) * vdh / (ndh * ndv + 0.001)\n );\n }\n color.rgb /= float(SAMPLE_PER_FRAME);\n#else\n#if !defined(SPECULARCUBEMAP_ENABLED)\n if (dot(hitNormal, rayDir) >= 0.0) {\n discard;\n }\n if (!intersect) {\n discard;\n }\n#endif\n float alpha = clamp(calculateAlpha(iterationCount, reflectivity, hitPixel, hitPoint, dist, rayDir), 0.0, 1.0);\n vec4 color = texture2D(sourceTexture, hitPixel);\n color.rgb *= alpha;\n#ifdef SPECULARCUBEMAP_ENABLED\n vec3 rayDirW = normalize(toWorldSpace * vec4(rayDir, 0.0)).rgb;\n alpha = alpha * (intersect ? 1.0 : 0.0);\n float bias = (1.0 - g) * 5.0;\n vec2 brdfParam2 = texture2D(brdfLookup, vec2(1.0 - g, ndv)).xy;\n color.rgb += (1.0 - alpha)\n * RGBMDecode(textureCubeLodEXT(specularCubemap, rayDirW, bias), 8.12).rgb\n * (spec * brdfParam2.x + brdfParam2.y)\n * specularIntensity;\n#endif\n#endif\n gl_FragColor = encodeHDR(color);\n}\n@end\n@export car.ssr.blur\nuniform sampler2D texture;\nuniform sampler2D gBufferTexture1;\nuniform sampler2D gBufferTexture2;\nuniform mat4 projection;\nuniform float depthRange : 0.05;\nvarying vec2 v_Texcoord;\nuniform vec2 textureSize;\nuniform float blurSize : 1.0;\n#ifdef BLEND\n #ifdef SSAOTEX_ENABLED\nuniform sampler2D ssaoTex;\n #endif\nuniform sampler2D sourceTexture;\n#endif\nfloat getLinearDepth(vec2 coord)\n{\n float depth = texture2D(gBufferTexture2, coord).r * 2.0 - 1.0;\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n}\n@import clay.util.rgbm\nvoid main()\n{\n @import clay.compositor.kernel.gaussian_9\n vec4 centerNTexel = texture2D(gBufferTexture1, v_Texcoord);\n float g = centerNTexel.a;\n float maxBlurSize = clamp(1.0 - g, 0.0, 1.0) * blurSize;\n#ifdef VERTICAL\n vec2 off = vec2(0.0, maxBlurSize / textureSize.y);\n#else\n vec2 off = vec2(maxBlurSize / textureSize.x, 0.0);\n#endif\n vec2 coord = v_Texcoord;\n vec4 sum = vec4(0.0);\n float weightAll = 0.0;\n vec3 cN = centerNTexel.rgb * 2.0 - 1.0;\n float cD = getLinearDepth(v_Texcoord);\n for (int i = 0; i < 9; i++) {\n vec2 coord = clamp((float(i) - 4.0) * off + v_Texcoord, vec2(0.0), vec2(1.0));\n float w = gaussianKernel[i]\n * clamp(dot(cN, texture2D(gBufferTexture1, coord).rgb * 2.0 - 1.0), 0.0, 1.0);\n float d = getLinearDepth(coord);\n w *= (1.0 - smoothstep(abs(cD - d) / depthRange, 0.0, 1.0));\n weightAll += w;\n sum += decodeHDR(texture2D(texture, coord)) * w;\n }\n#ifdef BLEND\n float aoFactor = 1.0;\n #ifdef SSAOTEX_ENABLED\n aoFactor = texture2D(ssaoTex, v_Texcoord).r;\n #endif\n gl_FragColor = encodeHDR(\n sum / weightAll * aoFactor + decodeHDR(texture2D(sourceTexture, v_Texcoord))\n );\n#else\n gl_FragColor = encodeHDR(sum / weightAll);\n#endif\n}\n@end";
 
 var Pass$1 = claygl.compositor.Pass;
 var cubemapUtil = claygl.util.cubemap;
@@ -253,15 +282,15 @@ function SSRPass(opt) {
     opt = opt || {};
 
     this._ssrPass = new Pass$1({
-        fragment: claygl.Shader.source('ecgl.ssr.main'),
+        fragment: claygl.Shader.source('car.ssr.main'),
         clearColor: [0, 0, 0, 0]
     });
     this._blurPass1 = new Pass$1({
-        fragment: claygl.Shader.source('ecgl.ssr.blur'),
+        fragment: claygl.Shader.source('car.ssr.blur'),
         clearColor: [0, 0, 0, 0]
     });
     this._blurPass2 = new Pass$1({
-        fragment: claygl.Shader.source('ecgl.ssr.blur'),
+        fragment: claygl.Shader.source('car.ssr.blur'),
         clearColor: [0, 0, 0, 0]
     });
     this._blendPass = new Pass$1({
@@ -936,7 +965,7 @@ var effectJson = {
 
         {
             'name': 'coc',
-            'shader': '#source(ecgl.dof.coc)',
+            'shader': '#source(car.dof.coc)',
             'outputs': {
                 'color': {
                     'parameters': {
@@ -955,7 +984,7 @@ var effectJson = {
 
         {
             'name': 'dof_far_blur',
-            'shader': '#source(ecgl.dof.diskBlur)',
+            'shader': '#source(car.dof.diskBlur)',
             'inputs': {
                 'texture': 'source',
                 'coc': 'coc'
@@ -975,7 +1004,7 @@ var effectJson = {
         },
         {
             'name': 'dof_near_blur',
-            'shader': '#source(ecgl.dof.diskBlur)',
+            'shader': '#source(car.dof.diskBlur)',
             'inputs': {
                 'texture': 'source',
                 'coc': 'coc'
@@ -1000,7 +1029,7 @@ var effectJson = {
 
         {
             'name': 'dof_coc_blur',
-            'shader': '#source(ecgl.dof.diskBlur)',
+            'shader': '#source(car.dof.diskBlur)',
             'inputs': {
                 'texture': 'coc'
             },
@@ -1024,7 +1053,7 @@ var effectJson = {
 
         {
             'name': 'dof_composite',
-            'shader': '#source(ecgl.dof.composite)',
+            'shader': '#source(car.dof.composite)',
             'inputs': {
                 'original': 'source',
                 'blurred': 'dof_far_blur',
@@ -1065,11 +1094,15 @@ var effectJson = {
     ]
 };
 
-var dofGLSL = "@export ecgl.dof.coc\nuniform sampler2D depth;\nuniform float zNear: 0.1;\nuniform float zFar: 2000;\nuniform float focalDistance: 3;\nuniform float focalRange: 1;\nuniform float focalLength: 30;\nuniform float fstop: 2.8;\nvarying vec2 v_Texcoord;\n@import clay.util.encode_float\nvoid main()\n{\n float z = texture2D(depth, v_Texcoord).r * 2.0 - 1.0;\n float dist = 2.0 * zNear * zFar / (zFar + zNear - z * (zFar - zNear));\n float aperture = focalLength / fstop;\n float coc;\n float uppper = focalDistance + focalRange;\n float lower = focalDistance - focalRange;\n if (dist <= uppper && dist >= lower) {\n coc = 0.5;\n }\n else {\n float focalAdjusted = dist > uppper ? uppper : lower;\n coc = abs(aperture * (focalLength * (dist - focalAdjusted)) / (dist * (focalAdjusted - focalLength)));\n coc = clamp(coc, 0.0, 2.0) / 2.00001;\n if (dist < lower) {\n coc = -coc;\n }\n coc = coc * 0.5 + 0.5;\n }\n gl_FragColor = encodeFloat(coc);\n}\n@end\n@export ecgl.dof.composite\n#define DEBUG 0\nuniform sampler2D original;\nuniform sampler2D blurred;\nuniform sampler2D nearfield;\nuniform sampler2D coc;\nuniform sampler2D nearcoc;\nvarying vec2 v_Texcoord;\n@import clay.util.rgbm\n@import clay.util.float\nvoid main()\n{\n vec4 blurredColor = decodeHDR(texture2D(blurred, v_Texcoord));\n vec4 originalColor = decodeHDR(texture2D(original, v_Texcoord));\n float fCoc = decodeFloat(texture2D(coc, v_Texcoord));\n fCoc = abs(fCoc * 2.0 - 1.0);\n float weight = smoothstep(0.0, 1.0, fCoc);\n#ifdef NEARFIELD_ENABLED\n vec4 nearfieldColor = decodeHDR(texture2D(nearfield, v_Texcoord));\n float fNearCoc = decodeFloat(texture2D(nearcoc, v_Texcoord));\n fNearCoc = abs(fNearCoc * 2.0 - 1.0);\n gl_FragColor = encodeHDR(\n mix(\n nearfieldColor, mix(originalColor, blurredColor, weight),\n pow(1.0 - fNearCoc, 4.0)\n )\n );\n#else\n gl_FragColor = encodeHDR(mix(originalColor, blurredColor, weight));\n#endif\n}\n@end\n@export ecgl.dof.diskBlur\n#define POISSON_KERNEL_SIZE 16;\nuniform sampler2D texture;\nuniform sampler2D coc;\nvarying vec2 v_Texcoord;\nuniform float blurRadius : 10.0;\nuniform vec2 textureSize : [512.0, 512.0];\nuniform vec2 poissonKernel[POISSON_KERNEL_SIZE];\nuniform float percent;\nfloat nrand(const in vec2 n) {\n return fract(sin(dot(n.xy ,vec2(12.9898,78.233))) * 43758.5453);\n}\n@import clay.util.rgbm\n@import clay.util.float\nvoid main()\n{\n vec2 offset = blurRadius / textureSize;\n float rnd = 6.28318 * nrand(v_Texcoord + 0.07 * percent );\n float cosa = cos(rnd);\n float sina = sin(rnd);\n vec4 basis = vec4(cosa, -sina, sina, cosa);\n#if !defined(BLUR_NEARFIELD) && !defined(BLUR_COC)\n offset *= abs(decodeFloat(texture2D(coc, v_Texcoord)) * 2.0 - 1.0);\n#endif\n#ifdef BLUR_COC\n float cocSum = 0.0;\n#else\n vec4 color = vec4(0.0);\n#endif\n float weightSum = 0.0;\n for (int i = 0; i < POISSON_KERNEL_SIZE; i++) {\n vec2 ofs = poissonKernel[i];\n ofs = vec2(dot(ofs, basis.xy), dot(ofs, basis.zw));\n vec2 uv = v_Texcoord + ofs * offset;\n vec4 texel = texture2D(texture, uv);\n float w = 1.0;\n#ifdef BLUR_COC\n float fCoc = decodeFloat(texel) * 2.0 - 1.0;\n cocSum += clamp(fCoc, -1.0, 0.0) * w;\n#else\n texel = decodeHDR(texel);\n #if !defined(BLUR_NEARFIELD)\n float fCoc = decodeFloat(texture2D(coc, uv)) * 2.0 - 1.0;\n w *= abs(fCoc);\n #endif\n color += texel * w;\n#endif\n weightSum += w;\n }\n#ifdef BLUR_COC\n gl_FragColor = encodeFloat(clamp(cocSum / weightSum, -1.0, 0.0) * 0.5 + 0.5);\n#else\n color /= weightSum;\n gl_FragColor = encodeHDR(color);\n#endif\n}\n@end";
+var dofCode = "@export car.dof.coc\nuniform sampler2D depth;\nuniform float zNear: 0.1;\nuniform float zFar: 2000;\nuniform float focalDistance: 3;\nuniform float focalRange: 1;\nuniform float focalLength: 30;\nuniform float fstop: 2.8;\nvarying vec2 v_Texcoord;\n@import clay.util.encode_float\nvoid main()\n{\n float z = texture2D(depth, v_Texcoord).r * 2.0 - 1.0;\n float dist = 2.0 * zNear * zFar / (zFar + zNear - z * (zFar - zNear));\n float aperture = focalLength / fstop;\n float coc;\n float uppper = focalDistance + focalRange;\n float lower = focalDistance - focalRange;\n if (dist <= uppper && dist >= lower) {\n coc = 0.5;\n }\n else {\n float focalAdjusted = dist > uppper ? uppper : lower;\n coc = abs(aperture * (focalLength * (dist - focalAdjusted)) / (dist * (focalAdjusted - focalLength)));\n coc = clamp(coc, 0.0, 2.0) / 2.00001;\n if (dist < lower) {\n coc = -coc;\n }\n coc = coc * 0.5 + 0.5;\n }\n gl_FragColor = encodeFloat(coc);\n}\n@end\n@export car.dof.composite\n#define DEBUG 0\nuniform sampler2D original;\nuniform sampler2D blurred;\nuniform sampler2D nearfield;\nuniform sampler2D coc;\nuniform sampler2D nearcoc;\nvarying vec2 v_Texcoord;\n@import clay.util.rgbm\n@import clay.util.float\nvoid main()\n{\n vec4 blurredColor = decodeHDR(texture2D(blurred, v_Texcoord));\n vec4 originalColor = decodeHDR(texture2D(original, v_Texcoord));\n float fCoc = decodeFloat(texture2D(coc, v_Texcoord));\n fCoc = abs(fCoc * 2.0 - 1.0);\n float weight = smoothstep(0.0, 1.0, fCoc);\n#ifdef NEARFIELD_ENABLED\n vec4 nearfieldColor = decodeHDR(texture2D(nearfield, v_Texcoord));\n float fNearCoc = decodeFloat(texture2D(nearcoc, v_Texcoord));\n fNearCoc = abs(fNearCoc * 2.0 - 1.0);\n gl_FragColor = encodeHDR(\n mix(\n nearfieldColor, mix(originalColor, blurredColor, weight),\n pow(1.0 - fNearCoc, 4.0)\n )\n );\n#else\n gl_FragColor = encodeHDR(mix(originalColor, blurredColor, weight));\n#endif\n}\n@end\n@export car.dof.diskBlur\n#define POISSON_KERNEL_SIZE 16;\nuniform sampler2D texture;\nuniform sampler2D coc;\nvarying vec2 v_Texcoord;\nuniform float blurRadius : 10.0;\nuniform vec2 textureSize : [512.0, 512.0];\nuniform vec2 poissonKernel[POISSON_KERNEL_SIZE];\nuniform float percent;\nfloat nrand(const in vec2 n) {\n return fract(sin(dot(n.xy ,vec2(12.9898,78.233))) * 43758.5453);\n}\n@import clay.util.rgbm\n@import clay.util.float\nvoid main()\n{\n vec2 offset = blurRadius / textureSize;\n float rnd = 6.28318 * nrand(v_Texcoord + 0.07 * percent );\n float cosa = cos(rnd);\n float sina = sin(rnd);\n vec4 basis = vec4(cosa, -sina, sina, cosa);\n#if !defined(BLUR_NEARFIELD) && !defined(BLUR_COC)\n offset *= abs(decodeFloat(texture2D(coc, v_Texcoord)) * 2.0 - 1.0);\n#endif\n#ifdef BLUR_COC\n float cocSum = 0.0;\n#else\n vec4 color = vec4(0.0);\n#endif\n float weightSum = 0.0;\n for (int i = 0; i < POISSON_KERNEL_SIZE; i++) {\n vec2 ofs = poissonKernel[i];\n ofs = vec2(dot(ofs, basis.xy), dot(ofs, basis.zw));\n vec2 uv = v_Texcoord + ofs * offset;\n vec4 texel = texture2D(texture, uv);\n float w = 1.0;\n#ifdef BLUR_COC\n float fCoc = decodeFloat(texel) * 2.0 - 1.0;\n cocSum += clamp(fCoc, -1.0, 0.0) * w;\n#else\n texel = decodeHDR(texel);\n #if !defined(BLUR_NEARFIELD)\n float fCoc = decodeFloat(texture2D(coc, uv)) * 2.0 - 1.0;\n w *= abs(fCoc);\n #endif\n color += texel * w;\n#endif\n weightSum += w;\n }\n#ifdef BLUR_COC\n gl_FragColor = encodeFloat(clamp(cocSum / weightSum, -1.0, 0.0) * 0.5 + 0.5);\n#else\n color /= weightSum;\n gl_FragColor = encodeHDR(color);\n#endif\n}\n@end";
+
+var temporalBlendCode = "@export car.temporalBlend\nuniform sampler2D prevTex;\nuniform sampler2D currTex;\nuniform sampler2D velocityTex;\nvarying vec2 v_Texcoord;\nvoid main() {\n vec4 vel = texture2D(velocityTex, v_Texcoord);\n vec4 curr = texture2D(currTex, v_Texcoord);\n vec4 prev = texture2D(prevTex, v_Texcoord - vel.rg);\n if (length(vel.rg) > 0.1 || vel.a < 0.01) {\n gl_FragColor = curr;\n }\n else {\n gl_FragColor = mix(prev, curr, 0.1);\n }\n}\n@end";
 
 var GBuffer = claygl.deferred.GBuffer;
 
-claygl.Shader['import'](dofGLSL);
+claygl.Shader.import(dofCode);
+
+claygl.Shader.import(temporalBlendCode);
 
 var commonOutputs = {
     color: {
@@ -1101,7 +1134,8 @@ function EffectCompositor() {
 
     this._gBufferPass = new GBuffer({
         renderTransparent: true,
-        enableTargetTexture3: false
+        enableTargetTexture3: false,
+        enableTargetTexture4: true
     });
 
     this._compositor = claygl.createCompositor(effectJson);
@@ -1129,7 +1163,8 @@ function EffectCompositor() {
     var gBufferObj = {
         normalTexture: this._gBufferPass.getTargetTexture1(),
         depthTexture: this._gBufferPass.getTargetTexture2(),
-        albedoTexture: this._gBufferPass.getTargetTexture3()
+        albedoTexture: this._gBufferPass.getTargetTexture3(),
+        velocityTexture: this._gBufferPass.getTargetTexture4()
     };
     this._ssaoPass = new SSAOPass(gBufferObj);
     this._ssrPass = new SSRPass(gBufferObj);
@@ -1270,6 +1305,13 @@ EffectCompositor.prototype.getSourceFrameBuffer = function () {
  */
 EffectCompositor.prototype.getSourceTexture = function () {
     return this._sourceTexture;
+};
+
+EffectCompositor.prototype.getVelocityTexture = function () {
+    return this._gBufferPass.getTargetTexture4();
+};
+EffectCompositor.prototype.getDepthTexture = function () {
+    return this._gBufferPass.getTargetTexture2();
 };
 
 /**
@@ -1544,10 +1586,15 @@ EffectCompositor.prototype.dispose = function (renderer) {
     this._ssaoPass.dispose(renderer);
 };
 
+var TAAGLSLCode = "\n@export car.taa\n#define SHADER_NAME TAA\n#define FLT_EPS 0.00000001\n#define MINMAX_3X3\n#define USE_CLIPPING\n#define USE_DILATION\nuniform sampler2D prevTex;\nuniform sampler2D currTex;\nuniform sampler2D velocityTex;\nuniform sampler2D depthTex;\nuniform bool still;\nuniform float sinTime;\nuniform float motionScale;\nuniform float feedbackMin: 0.88;\nuniform float feedbackMax: 0.97;\nuniform mat4 projection;\nuniform vec2 texelSize;\nuniform vec2 depthTexelSize;\nvarying vec2 v_Texcoord;\nconst vec3 w = vec3(0.2125, 0.7154, 0.0721);\nfloat depth_resolve_linear(float depth) {\n if (projection[3][3] == 0.0) {\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n }\n else {\n return (depth - projection[3][2]) / projection[2][2];\n }\n}\nvec3 find_closest_fragment_3x3(vec2 uv)\n{\n\tvec2 dd = abs(depthTexelSize.xy);\n\tvec2 du = vec2(dd.x, 0.0);\n\tvec2 dv = vec2(0.0, dd.y);\n\tvec3 dtl = vec3(-1, -1, texture2D(depthTex, uv - dv - du).x);\n\tvec3 dtc = vec3( 0, -1, texture2D(depthTex, uv - dv).x);\n\tvec3 dtr = vec3( 1, -1, texture2D(depthTex, uv - dv + du).x);\n\tvec3 dml = vec3(-1, 0, texture2D(depthTex, uv - du).x);\n\tvec3 dmc = vec3( 0, 0, texture2D(depthTex, uv).x);\n\tvec3 dmr = vec3( 1, 0, texture2D(depthTex, uv + du).x);\n\tvec3 dbl = vec3(-1, 1, texture2D(depthTex, uv + dv - du).x);\n\tvec3 dbc = vec3( 0, 1, texture2D(depthTex, uv + dv).x);\n\tvec3 dbr = vec3( 1, 1, texture2D(depthTex, uv + dv + du).x);\n\tvec3 dmin = dtl;\n\tif (dmin.z > dtc.z) dmin = dtc;\n\tif (dmin.z > dtr.z) dmin = dtr;\n\tif (dmin.z > dml.z) dmin = dml;\n\tif (dmin.z > dmc.z) dmin = dmc;\n\tif (dmin.z > dmr.z) dmin = dmr;\n\tif (dmin.z > dbl.z) dmin = dbl;\n\tif (dmin.z > dbc.z) dmin = dbc;\n\tif (dmin.z > dbr.z) dmin = dbr;\n\treturn vec3(uv + dd.xy * dmin.xy, dmin.z);\n}\nfloat PDnrand( vec2 n ) {\n\treturn fract( sin(dot(n.xy, vec2(12.9898, 78.233)))* 43758.5453 );\n}\nvec2 PDnrand2( vec2 n ) {\n\treturn fract( sin(dot(n.xy, vec2(12.9898, 78.233)))* vec2(43758.5453, 28001.8384) );\n}\nvec3 PDnrand3( vec2 n ) {\n\treturn fract( sin(dot(n.xy, vec2(12.9898, 78.233)))* vec3(43758.5453, 28001.8384, 50849.4141 ) );\n}\nvec4 PDnrand4( vec2 n ) {\n\treturn fract( sin(dot(n.xy, vec2(12.9898, 78.233)))* vec4(43758.5453, 28001.8384, 50849.4141, 12996.89) );\n}\nfloat PDsrand( vec2 n ) {\n\treturn PDnrand( n ) * 2.0 - 1.0;\n}\nvec2 PDsrand2( vec2 n ) {\n\treturn PDnrand2( n ) * 2.0 - 1.0;\n}\nvec3 PDsrand3( vec2 n ) {\n\treturn PDnrand3( n ) * 2.0 - 1.0;\n}\nvec4 PDsrand4( vec2 n ) {\n\treturn PDnrand4( n ) * 2.0 - 1.0;\n}\nvec3 RGB_YCoCg(vec3 c)\n{\n return vec3(\n c.x/4.0 + c.y/2.0 + c.z/4.0,\n c.x/2.0 - c.z/2.0,\n -c.x/4.0 + c.y/2.0 - c.z/4.0\n );\n}\nvec3 YCoCg_RGB(vec3 c)\n{\n return clamp(vec3(\n c.x + c.y - c.z,\n c.x + c.z,\n c.x - c.y - c.z\n ), vec3(0.0), vec3(1.0));\n}\nvec4 sample_color(sampler2D tex, vec2 uv)\n{\n#ifdef USE_YCOCG\n vec4 c = texture2D(tex, uv);\n return vec4(RGB_YCoCg(c.rgb), c.a);\n#else\n return texture2D(tex, uv);\n#endif\n}\nvec4 resolve_color(vec4 c)\n{\n#ifdef USE_YCOCG\n return vec4(YCoCg_RGB(c.rgb).rgb, c.a);\n#else\n return c;\n#endif\n}\nvec4 clip_aabb(vec3 aabb_min, vec3 aabb_max, vec4 p, vec4 q)\n{\n vec4 r = q - p;\n vec3 rmax = aabb_max - p.xyz;\n vec3 rmin = aabb_min - p.xyz;\n const float eps = FLT_EPS;\n if (r.x > rmax.x + eps)\n r *= (rmax.x / r.x);\n if (r.y > rmax.y + eps)\n r *= (rmax.y / r.y);\n if (r.z > rmax.z + eps)\n r *= (rmax.z / r.z);\n if (r.x < rmin.x - eps)\n r *= (rmin.x / r.x);\n if (r.y < rmin.y - eps)\n r *= (rmin.y / r.y);\n if (r.z < rmin.z - eps)\n r *= (rmin.z / r.z);\n return p + r;\n}\nvec4 sample_color_motion(sampler2D tex, vec2 uv, vec2 ss_vel)\n{\n vec2 v = 0.5 * ss_vel;\n float srand = PDsrand(uv + vec2(sinTime));\n vec2 vtap = v / 3.0;\n vec2 pos0 = uv + vtap * (0.5 * srand);\n vec4 accu = vec4(0.0);\n float wsum = 0.0;\n for (int i = -3; i <= 3; i++)\n {\n float w = 1.0; accu += w * sample_color(tex, pos0 + float(i) * vtap);\n wsum += w;\n }\n return accu / wsum;\n}\nvec4 temporal_reprojection(vec2 ss_txc, vec2 ss_vel, float vs_dist)\n{\n vec4 texel0 = sample_color(currTex, ss_txc);\n vec4 texel1 = sample_color(prevTex, ss_txc - ss_vel);\n vec2 uv = v_Texcoord;\n#if defined(MINMAX_3X3) || defined(MINMAX_3X3_ROUNDED)\n vec2 du = vec2(texelSize.x, 0.0);\n vec2 dv = vec2(0.0, texelSize.y);\n vec4 ctl = sample_color(currTex, uv - dv - du);\n vec4 ctc = sample_color(currTex, uv - dv);\n vec4 ctr = sample_color(currTex, uv - dv + du);\n vec4 cml = sample_color(currTex, uv - du);\n vec4 cmc = sample_color(currTex, uv);\n vec4 cmr = sample_color(currTex, uv + du);\n vec4 cbl = sample_color(currTex, uv + dv - du);\n vec4 cbc = sample_color(currTex, uv + dv);\n vec4 cbr = sample_color(currTex, uv + dv + du);\n vec4 cmin = min(ctl, min(ctc, min(ctr, min(cml, min(cmc, min(cmr, min(cbl, min(cbc, cbr))))))));\n vec4 cmax = max(ctl, max(ctc, max(ctr, max(cml, max(cmc, max(cmr, max(cbl, max(cbc, cbr))))))));\n #if defined(MINMAX_3X3_ROUNDED) || defined(USE_YCOCG) || defined(USE_CLIPPING)\n vec4 cavg = (ctl + ctc + ctr + cml + cmc + cmr + cbl + cbc + cbr) / 9.0;\n #endif\n #ifdef MINMAX_3X3_ROUNDED\n vec4 cmin5 = min(ctc, min(cml, min(cmc, min(cmr, cbc))));\n vec4 cmax5 = max(ctc, max(cml, max(cmc, max(cmr, cbc))));\n vec4 cavg5 = (ctc + cml + cmc + cmr + cbc) / 5.0;\n cmin = 0.5 * (cmin + cmin5);\n cmax = 0.5 * (cmax + cmax5);\n cavg = 0.5 * (cavg + cavg5);\n #endif\n#elif defined(MINMAX_4TAP_VARYING)\n const float _SubpixelThreshold = 0.5;\n const float _GatherBase = 0.5;\n const float _GatherSubpixelMotion = 0.1666;\n vec2 texel_vel = ss_vel / depthTexelSize.xy;\n float texel_vel_mag = length(texel_vel) * vs_dist;\n float k_subpixel_motion = saturate(_SubpixelThreshold / (FLT_EPS + texel_vel_mag));\n float k_min_max_support = _GatherBase + _GatherSubpixelMotion * k_subpixel_motion;\n vec2 ss_offset01 = k_min_max_support * vec2(-texelSize.x, texelSize.y);\n vec2 ss_offset11 = k_min_max_support * vec2(texelSize.x, texelSize.y);\n vec4 c00 = sample_color(currTex, uv - ss_offset11);\n vec4 c10 = sample_color(currTex, uv - ss_offset01);\n vec4 c01 = sample_color(currTex, uv + ss_offset01);\n vec4 c11 = sample_color(currTex, uv + ss_offset11);\n vec4 cmin = min(c00, min(c10, min(c01, c11)));\n vec4 cmax = max(c00, max(c10, max(c01, c11)));\n #ifdef USE_YCOCG || USE_CLIPPING\n vec4 cavg = (c00 + c10 + c01 + c11) / 4.0;\n #endif\n#endif\n#ifdef USE_YCOCG\n vec2 chroma_extent = vec2(0.25 * 0.5 * (cmax.r - cmin.r));\n vec2 chroma_center = texel0.gb;\n cmin.yz = chroma_center - chroma_extent;\n cmax.yz = chroma_center + chroma_extent;\n cavg.yz = chroma_center;\n#endif\n#ifdef USE_CLIPPING\n texel1 = clip_aabb(cmin.xyz, cmax.xyz, clamp(cavg, cmin, cmax), texel1);\n#else\n texel1 = clamp(texel1, cmin, cmax);\n#endif\n#ifdef USE_YCOCG\n float lum0 = texel0.r;\n float lum1 = texel1.r;\n#else\n float lum0 = dot(texel0.rgb, w);\n float lum1 = dot(texel1.rgb, w);\n#endif\n float unbiased_diff = abs(lum0 - lum1) / max(lum0, max(lum1, 0.2));\n float unbiased_weight = 1.0 - unbiased_diff;\n float unbiased_weight_sqr = unbiased_weight * unbiased_weight;\n float k_feedback = mix(feedbackMin, feedbackMax, unbiased_weight_sqr);\n return mix(texel0, texel1, k_feedback);\n}\nvoid main()\n{\n vec2 uv = v_Texcoord;\n if (still) {\n gl_FragColor = mix(texture2D(currTex, uv), texture2D(prevTex, uv), 0.9);\n return;\n }\n#ifdef USE_DILATION\n vec3 c_frag = find_closest_fragment_3x3(uv);\n vec2 ss_vel = texture2D(velocityTex, c_frag.xy).xy;\n float vs_dist = depth_resolve_linear(c_frag.z);\n#else\n vec2 ss_vel = texture2D(velocityTex, uv).xy;\n float vs_dist = depth_sample_linear(uv);\n#endif\n vec4 color_temporal = temporal_reprojection(v_Texcoord, ss_vel, vs_dist);\n vec4 to_buffer = resolve_color(color_temporal);\n vec4 noise4 = PDsrand4(v_Texcoord + sinTime + 0.6959174) / 510.0;\n gl_FragColor = clamp(to_buffer + noise4, vec4(0.0), vec4(1.0));\n}\n@end\n";
+
 // Temporal Super Sample for static Scene
 var Pass$2 = claygl.compositor.Pass;
 
-function TemporalSuperSampling () {
+claygl.Shader.import(TAAGLSLCode);
+
+function TemporalSuperSampling (opt) {
+    opt = opt || {};
     var haltonSequence = [];
 
     for (var i = 0; i < 30; i++) {
@@ -1568,13 +1615,15 @@ function TemporalSuperSampling () {
     this._prevFrameTex = new claygl.Texture2D();
     this._outputTex = new claygl.Texture2D();
 
-    var blendPass = this._blendPass = new Pass$2({
-        fragment: claygl.Shader.source('clay.compositor.blend')
+    var taaPass = this._taaPass = new Pass$2({
+        fragment: claygl.Shader.source('car.taa')
     });
-    blendPass.material.disableTexturesAll();
-    blendPass.material.enableTexture(['texture1', 'texture2']);
+    taaPass.setUniform('velocityTex', opt.velocityTexture);
+    taaPass.setUniform('depthTex', opt.depthTexture);
 
-    this._blendFb = new claygl.FrameBuffer({
+    this._depthTex = opt.depthTexture;
+
+    this._taaFb = new claygl.FrameBuffer({
         depthBuffer: false
     });
 
@@ -1662,24 +1711,30 @@ TemporalSuperSampling.prototype = {
         return this._frame >= this._haltonSequence.length;
     },
 
-    render: function (renderer) {
-        var blendPass = this._blendPass;
-        if (this._frame === 0) {
-            // Direct output
-            blendPass.setUniform('weight1', 0);
-            blendPass.setUniform('weight2', 1);
-        }
-        else {
-            blendPass.setUniform('weight1', 0.9);
-            blendPass.setUniform('weight2', 0.1);
-        }
-        blendPass.setUniform('texture1', this._prevFrameTex);
-        blendPass.setUniform('texture2', this._sourceTex);
+    render: function (renderer, camera$$1, still) {
+        var taaPass = this._taaPass;
+        // if (this._frame === 0) {
+        //     // Direct output
+        //     taaPass.setUniform('weight1', 0);
+        //     taaPass.setUniform('weight2', 1);
+        // }
+        // else {
+        // taaPass.setUniform('weight1', 0.9);
+        // taaPass.setUniform('weight2', 0.1);
+        // }
+        taaPass.setUniform('prevTex', this._prevFrameTex);
+        taaPass.setUniform('currTex', this._sourceTex);
+        taaPass.setUniform('texelSize', [1 / this._sourceTex.width, 1 / this._sourceTex.width]);
+        taaPass.setUniform('depthTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.width]);
+        taaPass.setUniform('sinTime', Math.sin(+(new Date()) / 8));
+        taaPass.setUniform('projection', camera$$1.projectionMatrix.array);
 
-        this._blendFb.attach(this._outputTex);
-        this._blendFb.bind(renderer);
-        blendPass.render(renderer);
-        this._blendFb.unbind(renderer);
+        taaPass.setUniform('still', !!still);
+
+        this._taaFb.attach(this._outputTex);
+        this._taaFb.bind(renderer);
+        taaPass.render(renderer);
+        this._taaFb.unbind(renderer);
 
         this._outputPass.setUniform('texture', this._outputTex);
         this._outputPass.render(renderer);
@@ -1694,12 +1749,12 @@ TemporalSuperSampling.prototype = {
 
     dispose: function (renderer) {
         this._sourceFb.dispose(renderer);
-        this._blendFb.dispose(renderer);
+        this._taaFb.dispose(renderer);
         this._prevFrameTex.dispose(renderer);
         this._outputTex.dispose(renderer);
         this._sourceTex.dispose(renderer);
         this._outputPass.dispose(renderer);
-        this._blendPass.dispose(renderer);
+        this._taaPass.dispose(renderer);
     }
 };
 
@@ -1715,26 +1770,16 @@ function RenderMain(renderer, scene, enableShadow) {
 
     this._compositor = new EffectCompositor();
 
-    this._temporalSS = new TemporalSuperSampling();
+    this._temporalSS = new TemporalSuperSampling({
+        velocityTexture: this._compositor.getVelocityTexture(),
+        depthTexture: this._compositor.getDepthTexture()
+    });
 
     if (enableShadow) {
         this._shadowMapPass = new ShadowMapPass({
             lightFrustumBias: 20
         });
     }
-
-    var pcfKernels = [];
-    var off = 0;
-    for (var i = 0; i < 30; i++) {
-        var pcfKernel = [];
-        for (var k = 0; k < 6; k++) {
-            pcfKernel.push(halton(off, 2) * 4.0 - 2.0);
-            pcfKernel.push(halton(off, 3) * 4.0 - 2.0);
-            off++;
-        }
-        pcfKernels.push(pcfKernel);
-    }
-    this._pcfKernels = pcfKernels;
 
     this._enableTemporalSS = 'auto';
 
@@ -1783,7 +1828,7 @@ RenderMain.prototype.prepareRender = function () {
     this._updateSRGBOfList(renderList.transparent);
 
     this._frame = 0;
-    this._temporalSS.resetFrame();
+    // this._temporalSS.resetFrame();
 
     var lights = scene.getLights();
     for (var i = 0; i < lights.length; i++) {
@@ -1874,16 +1919,16 @@ RenderMain.prototype._doRender = function (scene, camera$$1, accumulating, accum
         this.afterRenderScene(renderer, scene, camera$$1);
         frameBuffer.unbind(renderer);
 
-        if (this.needsTemporalSS() && accumulating) {
+        if (this.needsTemporalSS()) {
             this._compositor.composite(renderer, scene, camera$$1, this._temporalSS.getSourceFrameBuffer(), this._temporalSS.getFrame());
-            this._temporalSS.render(renderer);
+            this._temporalSS.render(renderer, camera$$1, accumulating);
         }
         else {
             this._compositor.composite(renderer, scene, camera$$1, null, 0);
         }
     }
     else {
-        if (this.needsTemporalSS() && accumulating) {
+        if (this.needsTemporalSS()) {
             frameBuffer = this._temporalSS.getSourceFrameBuffer();
             frameBuffer.bind(renderer);
             renderer.saveClear();
@@ -1892,7 +1937,7 @@ RenderMain.prototype._doRender = function (scene, camera$$1, accumulating, accum
             this.afterRenderScene(renderer, scene, camera$$1);
             renderer.restoreClear();
             frameBuffer.unbind(renderer);
-            this._temporalSS.render(renderer);
+            this._temporalSS.render(renderer, camera$$1, accumulating);
         }
         else {
             renderer.render(scene, camera$$1, true, this.preZ);
@@ -1901,9 +1946,6 @@ RenderMain.prototype._doRender = function (scene, camera$$1, accumulating, accum
     }
 
     this.afterRenderAll(renderer, scene, camera$$1);
-
-    // this._compositor._gBufferPass.renderDebug(renderer, camera, 'normal');
-    // this._shadowMapPass.renderDebug(renderer);
 };
 
 RenderMain.prototype._updateSRGBOfList = function (list) {
@@ -2004,6 +2046,21 @@ RenderMain.prototype.setPostEffect = function (opts, api) {
     });
 };
 
+RenderMain.prototype.setShadow = function (opts) {
+    var pcfKernels = [];
+    var off = 0;
+    for (var i = 0; i < 30; i++) {
+        var pcfKernel = [];
+        for (var k = 0; k < opts.kernelSize; k++) {
+            pcfKernel.push((halton(off, 2) * 2.0 - 1.0) * opts.blurSize);
+            pcfKernel.push((halton(off, 3) * 2.0 - 1.0) * opts.blurSize);
+            off++;
+        }
+        pcfKernels.push(pcfKernel);
+    }
+    this._pcfKernels = pcfKernels;
+};
+
 RenderMain.prototype.isDOFEnabled = function () {
     return this._enablePostEffect && this._enableDOF;
 };
@@ -2031,7 +2088,11 @@ RenderMain.prototype.isLinearSpace = function () {
 
 var defaultGraphicConfig = {
     // If enable shadow
-    shadow: true,
+    shadow: {
+        enable: true,
+        kernelSize: 6,
+        blurSize: 2
+    },
 
     // Configuration about post effects.
     postEffect: {
@@ -2480,10 +2541,16 @@ function isPrimitive(obj) {
 
 function ClayAdvancedRenderer(renderer, scene, timeline, graphicOpts) {
     graphicOpts = merge({}, graphicOpts);
+    if (typeof graphicOpts.shadow === 'boolean') {
+        graphicOpts.shadow = {
+            enable: graphicOpts.shadow
+        };
+    }
     graphicOpts = merge(graphicOpts, defaultGraphicConfig);
 
     this._renderMain = new RenderMain(renderer, scene, graphicOpts.shadow);
 
+    this._renderMain.setShadow(graphicOpts.shadow);
     this._renderMain.setPostEffect(graphicOpts.postEffect);
 
     this._needsRefresh = false;
@@ -2500,6 +2567,11 @@ ClayAdvancedRenderer.prototype.render = function (renderImmediately) {
 ClayAdvancedRenderer.prototype.setPostEffect = function (opts) {
     merge(this._graphicOpts.postEffect, opts, true);
     this._renderMain.setPostEffect(this._graphicOpts.postEffect);
+};
+
+ClayAdvancedRenderer.prototype.setShadow = function (opts) {
+    merge(this._graphicOpts.shadow, opts, true);
+    this._renderMain.setShadow(this._graphicOpts.shadow);
 };
 
 ClayAdvancedRenderer.prototype._loop = function (frameTime) {

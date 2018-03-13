@@ -127,7 +127,7 @@ TemporalSuperSampling.prototype = {
         return this._frame >= this._haltonSequence.length;
     },
 
-    render: function (renderer, camera) {
+    render: function (renderer, camera, still) {
         var taaPass = this._taaPass;
         // if (this._frame === 0) {
         //     // Direct output
@@ -144,6 +144,8 @@ TemporalSuperSampling.prototype = {
         taaPass.setUniform('depthTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.width]);
         taaPass.setUniform('sinTime', Math.sin(+(new Date()) / 8));
         taaPass.setUniform('projection', camera.projectionMatrix.array);
+
+        taaPass.setUniform('still', !!still);
 
         this._taaFb.attach(this._outputTex);
         this._taaFb.bind(renderer);
