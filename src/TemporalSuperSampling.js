@@ -140,8 +140,8 @@ TemporalSuperSampling.prototype = {
         // }
         taaPass.setUniform('prevTex', this._prevFrameTex);
         taaPass.setUniform('currTex', this._sourceTex);
-        taaPass.setUniform('texelSize', [1 / this._sourceTex.width, 1 / this._sourceTex.width]);
-        taaPass.setUniform('depthTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.width]);
+        taaPass.setUniform('texelSize', [1 / this._sourceTex.width, 1 / this._sourceTex.height]);
+        taaPass.setUniform('depthTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.height]);
         taaPass.setUniform('sinTime', Math.sin(+(new Date()) / 8));
         taaPass.setUniform('projection', camera.projectionMatrix.array);
 

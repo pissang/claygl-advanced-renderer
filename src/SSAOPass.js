@@ -58,9 +58,9 @@ function SSAOPass(opt) {
     this._ssaoPass = new Pass({
         fragment: Shader.source('car.ssao.estimate')
     });
-    this._blendPass = new Pass({
-        fragment: Shader.source('car.temporalBlend')
-    });
+    // this._blendPass = new Pass({
+    //     fragment: Shader.source('car.temporalBlend')
+    // });
     this._blurPass = new Pass({
         fragment: Shader.source('car.ssao.blur')
     });
@@ -68,8 +68,8 @@ function SSAOPass(opt) {
 
     this._ssaoTexture = new Texture2D();
 
-    this._prevTexture = new Texture2D();
-    this._currTexture = new Texture2D();
+    // this._prevTexture = new Texture2D();
+    // this._currTexture = new Texture2D();
 
     this._blurTexture = new Texture2D();
 
@@ -116,7 +116,7 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
 
     var ssaoPass = this._ssaoPass;
     var blurPass = this._blurPass;
-    var blendPass = this._blendPass;
+    // var blendPass = this._blendPass;
 
     ssaoPass.setUniform('kernel', this._kernels[frame % this._kernels.length]);
     ssaoPass.setUniform('depthTex', this._depthTex);
@@ -135,17 +135,17 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
     var ssaoTexture = this._ssaoTexture;
     var blurTexture = this._blurTexture;
 
-    var prevTexture = this._prevTexture;
-    var currTexture = this._currTexture;
+    // var prevTexture = this._prevTexture;
+    // var currTexture = this._currTexture;
 
     ssaoTexture.width = width;
     ssaoTexture.height = height;
     blurTexture.width = width;
     blurTexture.height = height;
-    prevTexture.width = width;
-    prevTexture.height = height;
-    currTexture.width = width;
-    currTexture.height = height;
+    // prevTexture.width = width;
+    // prevTexture.height = height;
+    // currTexture.width = width;
+    // currTexture.height = height;
 
     this._framebuffer.attach(ssaoTexture);
     this._framebuffer.bind(renderer);

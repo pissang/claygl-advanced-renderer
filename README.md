@@ -9,7 +9,8 @@ ClayGL advanced renderer provide a full render pipeline which includes:
 + Color Correction
 + ACES Tone Mapping
 + FXAA
-+ Progressive Enhancement on Antialising, SSAO, SSR, Shadow.
++ Temporal Anti-Aliasing
++ Progressive Enhancement on SSAO, SSR, Shadow.
 
 ### Basic Usage
 

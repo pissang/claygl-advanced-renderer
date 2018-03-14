@@ -7,7 +7,7 @@
 #define FLT_EPS 0.00000001
 #define MINMAX_3X3
 #define USE_CLIPPING
-#define USE_DILATION
+#define USE_MOTION_BLUR
 
 uniform sampler2D prevTex;
 uniform sampler2D currTex;
@@ -18,7 +18,7 @@ uniform bool still;
 
 uniform float sinTime;
 
-uniform float motionScale;
+uniform float motionScale : 0.2;
 uniform float feedbackMin: 0.88;
 uniform float feedbackMax: 0.97;
 
@@ -194,7 +194,7 @@ vec4 clip_aabb(vec3 aabb_min, vec3 aabb_max, vec4 p, vec4 q)
 // {
 //     vec2 du = vec2(texelSize.x, 0.0);
 //     vec2 dv = vec2(0.0, texelSize.y);
-//     vec2 mv = 0.0;
+//     vec2 mv = vec2(0.0);
 //     float rmv = 0.0;
 
 //     int end = support + 1;
@@ -360,22 +360,43 @@ void main()
     float vs_dist = depth_resolve_linear(c_frag.z);
 #else
     vec2 ss_vel = texture2D(velocityTex, uv).xy;
-    float vs_dist = depth_sample_linear(uv);
+    float depth = texture2D(depthTex, uv).r;
+    float vs_dist = depth_resolve_linear(depth);
 #endif
+    // Remove pixels moved too far.
+    if (length(ss_vel) > 0.5) {
+        gl_FragColor = texture2D(currTex, uv);
+        return;
+    }
 
     // temporal resolve
     vec4 color_temporal = temporal_reprojection(v_Texcoord, ss_vel, vs_dist);
-
-    // prepare outputs
-    vec4 to_buffer = resolve_color(color_temporal);
 
     //// NOTE: velocity debug
     //to_screen.g += 100.0 * length(ss_vel);
     //to_screen = vec4(100.0 * abs(ss_vel), 0.0, 0.0);
 
+#ifdef USE_MOTION_BLUR
+    #ifdef USE_MOTION_BLUR_NEIGHBORMAX
+        ss_vel = motionScale * tex2D(_VelocityNeighborMax, v_Texcoord).xy;
+    #else
+        ss_vel = motionScale * ss_vel;
+    #endif
+
+    float vel_mag = length(ss_vel / texelSize);
+    const float vel_trust_full = 2.0;
+    const float vel_trust_none = 15.0;
+    const float vel_trust_span = vel_trust_none - vel_trust_full;
+    float trust = 1.0 - clamp(vel_mag - vel_trust_full, 0.0, vel_trust_span) / vel_trust_span;
+
+    vec4 color_motion = sample_color_motion(currTex, v_Texcoord, ss_vel);
+
+    gl_FragColor = resolve_color(mix(color_motion, color_temporal, trust));
+#else
     // add noise
     vec4 noise4 = PDsrand4(v_Texcoord + sinTime + 0.6959174) / 510.0;
-    gl_FragColor = clamp(to_buffer + noise4, vec4(0.0), vec4(1.0));
+    gl_FragColor = clamp(resolve_color(color_temporal) + noise4, vec4(0.0), vec4(1.0));
+#endif
 
     // gl_FragColor = vec4(vec3(texture2D(depthTex, v_Texcoord).r), 1.0);
 }
