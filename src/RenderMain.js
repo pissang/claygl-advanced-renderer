@@ -102,7 +102,7 @@ RenderMain.prototype.render = function (accumulating) {
 };
 
 RenderMain.prototype.needsAccumulate = function () {
-    return this.needsTemporalSS() || this._needsSortProgressively;
+    return this.needsTemporalSS();
 };
 
 RenderMain.prototype.needsTemporalSS = function () {

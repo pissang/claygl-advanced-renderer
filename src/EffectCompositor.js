@@ -97,7 +97,8 @@ EffectCompositor.prototype.resize = function (width, height, dpr) {
 };
 
 EffectCompositor.prototype._ifRenderNormalPass = function () {
-    return this._enableSSAO || this._enableEdge || this._enableSSR;
+    // return this._enableSSAO || this._enableEdge || this._enableSSR;
+    return true;
 };
 
 EffectCompositor.prototype._getPrevNode = function (node) {

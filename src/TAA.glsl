@@ -7,7 +7,6 @@
 #define FLT_EPS 0.00000001
 #define MINMAX_3X3
 #define USE_CLIPPING
-#define USE_MOTION_BLUR
 
 uniform sampler2D prevTex;
 uniform sampler2D currTex;
@@ -18,7 +17,7 @@ uniform bool still;
 
 uniform float sinTime;
 
-uniform float motionScale : 0.2;
+uniform float motionScale : 0.1;
 uniform float feedbackMin: 0.88;
 uniform float feedbackMax: 0.97;
 
@@ -152,41 +151,41 @@ vec4 resolve_color(vec4 c)
 vec4 clip_aabb(vec3 aabb_min, vec3 aabb_max, vec4 p, vec4 q)
 {
 // #ifdef USE_OPTIMIZATIONS
-//     // note: only clips towards aabb center (but fast!)
-//     vec3 p_clip = 0.5 * (aabb_max + aabb_min);
-//     vec3 e_clip = 0.5 * (aabb_max - aabb_min) + FLT_EPS;
+    // note: only clips towards aabb center (but fast!)
+    vec3 p_clip = 0.5 * (aabb_max + aabb_min);
+    vec3 e_clip = 0.5 * (aabb_max - aabb_min) + FLT_EPS;
 
-//     vec4 v_clip = q - vec4(p_clip, p.w);
-//     vec3 v_unit = v_clip.xyz / e_clip;
-//     vec3 a_unit = abs(v_unit);
-//     float ma_unit = max(a_unit.x, max(a_unit.y, a_unit.z));
+    vec4 v_clip = q - vec4(p_clip, p.w);
+    vec3 v_unit = v_clip.xyz / e_clip;
+    vec3 a_unit = abs(v_unit);
+    float ma_unit = max(a_unit.x, max(a_unit.y, a_unit.z));
 
-//     if (ma_unit > 1.0)
-//         return vec4(p_clip, p.w) + v_clip / ma_unit;
-//     else
-//         return q;// point inside aabb
+    if (ma_unit > 1.0)
+        return vec4(p_clip, p.w) + v_clip / ma_unit;
+    else
+        return q;// point inside aabb
 // #else
-    vec4 r = q - p;
-    vec3 rmax = aabb_max - p.xyz;
-    vec3 rmin = aabb_min - p.xyz;
+//     vec4 r = q - p;
+//     vec3 rmax = aabb_max - p.xyz;
+//     vec3 rmin = aabb_min - p.xyz;
 
-    const float eps = FLT_EPS;
+//     const float eps = FLT_EPS;
 
-    if (r.x > rmax.x + eps)
-        r *= (rmax.x / r.x);
-    if (r.y > rmax.y + eps)
-        r *= (rmax.y / r.y);
-    if (r.z > rmax.z + eps)
-        r *= (rmax.z / r.z);
+//     if (r.x > rmax.x + eps)
+//         r *= (rmax.x / r.x);
+//     if (r.y > rmax.y + eps)
+//         r *= (rmax.y / r.y);
+//     if (r.z > rmax.z + eps)
+//         r *= (rmax.z / r.z);
 
-    if (r.x < rmin.x - eps)
-        r *= (rmin.x / r.x);
-    if (r.y < rmin.y - eps)
-        r *= (rmin.y / r.y);
-    if (r.z < rmin.z - eps)
-        r *= (rmin.z / r.z);
+//     if (r.x < rmin.x - eps)
+//         r *= (rmin.x / r.x);
+//     if (r.y < rmin.y - eps)
+//         r *= (rmin.y / r.y);
+//     if (r.z < rmin.z - eps)
+//         r *= (rmin.z / r.z);
 
-    return p + r;
+//     return p + r;
 // #endif
 }
 
@@ -356,18 +355,19 @@ void main()
 
     //--- 3x3 nearest (good)
     vec3 c_frag = find_closest_fragment_3x3(uv);
-    vec2 ss_vel = texture2D(velocityTex, c_frag.xy).xy;
+    vec4 velTexel = texture2D(velocityTex, c_frag.xy);
     float vs_dist = depth_resolve_linear(c_frag.z);
 #else
-    vec2 ss_vel = texture2D(velocityTex, uv).xy;
+    vec4 velTexel = texture2D(velocityTex, uv);
     float depth = texture2D(depthTex, uv).r;
     float vs_dist = depth_resolve_linear(depth);
 #endif
     // Remove pixels moved too far.
-    if (length(ss_vel) > 0.5) {
+    if (length(velTexel.rg) > 0.5 || velTexel.a < 0.1) {
         gl_FragColor = texture2D(currTex, uv);
         return;
     }
+    vec2 ss_vel = velTexel.rg;
 
     // temporal resolve
     vec4 color_temporal = temporal_reprojection(v_Texcoord, ss_vel, vs_dist);
