@@ -16,6 +16,7 @@ function ClayAdvancedRenderer(renderer, scene, timeline, graphicOpts) {
 
     this._renderMain.setShadow(graphicOpts.shadow);
     this._renderMain.setPostEffect(graphicOpts.postEffect);
+    this._renderMain.setTemporalSuperSampling(graphicOpts.temporalSuperSampling);
 
     this._needsRefresh = false;
 

@@ -6,6 +6,10 @@ export default {
         blurSize: 2
     },
 
+    temporalSuperSampling: {
+        enable: 'auto'
+    },
+
     // Configuration about post effects.
     postEffect: {
         // If enable post effects.

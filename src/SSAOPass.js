@@ -58,9 +58,9 @@ function SSAOPass(opt) {
     this._ssaoPass = new Pass({
         fragment: Shader.source('car.ssao.estimate')
     });
-    // this._blendPass = new Pass({
-    //     fragment: Shader.source('car.temporalBlend')
-    // });
+    this._blendPass = new Pass({
+        fragment: Shader.source('car.temporalBlend')
+    });
     this._blurPass = new Pass({
         fragment: Shader.source('car.ssao.blur')
     });
@@ -68,8 +68,8 @@ function SSAOPass(opt) {
 
     this._ssaoTexture = new Texture2D();
 
-    // this._prevTexture = new Texture2D();
-    // this._currTexture = new Texture2D();
+    this._prevTexture = new Texture2D();
+    this._currTexture = new Texture2D();
 
     this._blurTexture = new Texture2D();
 
@@ -96,6 +96,11 @@ function SSAOPass(opt) {
 
     this._blurPass.material.setUniform('normalTex', this._normalTex);
     this._blurPass.material.setUniform('depthTex', this._depthTex);
+
+
+    this._temporalReprojection = true;
+
+    this._frame = 0;
 }
 
 SSAOPass.prototype.setDepthTexture = function (depthTex) {
@@ -116,9 +121,13 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
 
     var ssaoPass = this._ssaoPass;
     var blurPass = this._blurPass;
-    // var blendPass = this._blendPass;
+    var blendPass = this._blendPass;
 
-    ssaoPass.setUniform('kernel', this._kernels[frame % this._kernels.length]);
+    this._frame++;
+
+    ssaoPass.setUniform('kernel', this._kernels[
+        (this._temporalReprojection ? this._frame : frame) % this._kernels.length
+    ]);
     ssaoPass.setUniform('depthTex', this._depthTex);
     if (this._normalTex != null) {
         ssaoPass.setUniform('normalTex', this._normalTex);
@@ -135,17 +144,17 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
     var ssaoTexture = this._ssaoTexture;
     var blurTexture = this._blurTexture;
 
-    // var prevTexture = this._prevTexture;
-    // var currTexture = this._currTexture;
+    var prevTexture = this._prevTexture;
+    var currTexture = this._currTexture;
 
     ssaoTexture.width = width;
     ssaoTexture.height = height;
     blurTexture.width = width;
     blurTexture.height = height;
-    // prevTexture.width = width;
-    // prevTexture.height = height;
-    // currTexture.width = width;
-    // currTexture.height = height;
+    prevTexture.width = width;
+    prevTexture.height = height;
+    currTexture.width = width;
+    currTexture.height = height;
 
     this._framebuffer.attach(ssaoTexture);
     this._framebuffer.bind(renderer);
@@ -153,17 +162,19 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
     renderer.gl.clear(renderer.gl.COLOR_BUFFER_BIT);
     ssaoPass.render(renderer);
 
-    // this._framebuffer.attach(currTexture);
-    // blendPass.setUniform('prevTex', prevTexture);
-    // blendPass.setUniform('currTex', ssaoTexture);
-    // blendPass.setUniform('velocityTex', this._velocityTex);
-    // blendPass.render(renderer);
+    if (this._temporalReprojection) {
+        this._framebuffer.attach(currTexture);
+        blendPass.setUniform('prevTex', prevTexture);
+        blendPass.setUniform('currTex', ssaoTexture);
+        blendPass.setUniform('velocityTex', this._velocityTex);
+        blendPass.render(renderer);
+    }
 
     blurPass.setUniform('textureSize', [width, height]);
     blurPass.setUniform('projection', camera.projectionMatrix.array);
     this._framebuffer.attach(blurTexture);
     blurPass.setUniform('direction', 0);
-    blurPass.setUniform('ssaoTexture', ssaoTexture);
+    blurPass.setUniform('ssaoTexture', this._temporalReprojection ? currTexture : ssaoTexture);
     blurPass.render(renderer);
 
     this._framebuffer.attach(ssaoTexture);
@@ -178,10 +189,9 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
     renderer.gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
 
     // Swap texture
-
-    // var tmp = this._prevTexture;
-    // this._prevTexture = this._currTexture;
-    // this._currTexture = tmp;
+    var tmp = this._prevTexture;
+    this._prevTexture = this._currTexture;
+    this._currTexture = tmp;
 };
 
 SSAOPass.prototype.getTargetTexture = function () {
@@ -230,6 +240,8 @@ SSAOPass.prototype.setNoiseSize = function (size) {
 SSAOPass.prototype.dispose = function (renderer) {
     this._blurTexture.dispose(renderer);
     this._ssaoTexture.dispose(renderer);
+    this._prevTexture.dispose(renderer);
+    this._currTexture.dispose(renderer);
 };
 
 SSAOPass.prototype.isFinished = function (frame) {

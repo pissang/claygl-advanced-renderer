@@ -87,19 +87,29 @@ float ssaoEstimator(in vec3 originPos, in vec3 N, in mat3 kernelBasis) {
 void main()
 {
 
-    vec4 depthTexel = texture2D(depthTex, v_Texcoord);
+    vec2 uv = v_Texcoord;
+    vec4 depthTexel = texture2D(depthTex, uv);
 
 #ifdef NORMALTEX_ENABLED
-    vec4 tex = texture2D(normalTex, v_Texcoord);
+    vec2 texelSize = 1.0 / depthTexSize;
+    vec4 tex = texture2D(normalTex, uv);
+    vec3 r = texture2D(normalTex, uv + vec2(texelSize.x, 0.0)).rgb;
+    vec3 l = texture2D(normalTex, uv + vec2(-texelSize.x, 0.0)).rgb;
+    vec3 t = texture2D(normalTex, uv + vec2(0.0, -texelSize.y)).rgb;
+    vec3 b = texture2D(normalTex, uv + vec2(0.0, texelSize.y)).rgb;
     // Is empty
-    if (dot(tex.rgb, tex.rgb) == 0.0) {
+    // Sample neighbor pixels to avoid dark pixels in the edge.
+    if (dot(tex.rgb, tex.rgb) == 0.0
+    || dot(r, r) == 0.0 || dot(l, l) == 0.0
+    || dot(t, t) == 0.0 || dot(b, b) == 0.0
+    ) {
         gl_FragColor = vec4(1.0);
         return;
     }
     vec3 N = tex.rgb * 2.0 - 1.0;
     N = (viewInverseTranspose * vec4(N, 0.0)).xyz;
 
-    vec2 noiseTexCoord = depthTexSize / vec2(noiseTexSize) * v_Texcoord;
+    vec2 noiseTexCoord = depthTexSize / vec2(noiseTexSize) * uv;
     vec3 rvec = texture2D(noiseTex, noiseTexCoord).rgb * 2.0 - 1.0;
     // Tangent
     vec3 T = normalize(rvec - N * dot(rvec, N));
@@ -116,7 +126,7 @@ void main()
 
     float z = depthTexel.r * 2.0 - 1.0;
 
-    vec4 projectedPos = vec4(v_Texcoord * 2.0 - 1.0, z, 1.0);
+    vec4 projectedPos = vec4(uv * 2.0 - 1.0, z, 1.0);
     vec4 p4 = projectionInv * projectedPos;
 
     vec3 position = p4.xyz / p4.w;

@@ -5,7 +5,7 @@
 #define SHADER_NAME TAA
 
 #define FLT_EPS 0.00000001
-#define MINMAX_3X3
+#define MINMAX_4TAP_VARYING
 #define USE_CLIPPING
 
 uniform sampler2D prevTex;
@@ -242,7 +242,7 @@ vec4 temporal_reprojection(vec2 ss_txc, vec2 ss_vel, float vs_dist)
     vec4 texel1 = sample_color(prevTex, ss_txc - ss_vel);
 
     // calc min-max of current neighbourhood
-    vec2 uv = v_Texcoord;
+    vec2 uv = ss_txc;
 
 #if defined(MINMAX_3X3) || defined(MINMAX_3X3_ROUNDED)
 
@@ -283,7 +283,7 @@ vec4 temporal_reprojection(vec2 ss_txc, vec2 ss_vel, float vs_dist)
 
     vec2 texel_vel = ss_vel / depthTexelSize.xy;
     float texel_vel_mag = length(texel_vel) * vs_dist;
-    float k_subpixel_motion = saturate(_SubpixelThreshold / (FLT_EPS + texel_vel_mag));
+    float k_subpixel_motion = clamp(_SubpixelThreshold / (FLT_EPS + texel_vel_mag), 0.0, 1.0);
     float k_min_max_support = _GatherBase + _GatherSubpixelMotion * k_subpixel_motion;
 
     vec2 ss_offset01 = k_min_max_support * vec2(-texelSize.x, texelSize.y);
@@ -296,7 +296,7 @@ vec4 temporal_reprojection(vec2 ss_txc, vec2 ss_vel, float vs_dist)
     vec4 cmin = min(c00, min(c10, min(c01, c11)));
     vec4 cmax = max(c00, max(c10, max(c01, c11)));
 
-    #ifdef USE_YCOCG || USE_CLIPPING
+    #if defined(USE_YCOCG) || defined(USE_CLIPPING)
         vec4 cavg = (c00 + c10 + c01 + c11) / 4.0;
     #endif
 #endif

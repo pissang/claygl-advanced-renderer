@@ -34,8 +34,9 @@ function TemporalSuperSampling (opt) {
     var taaPass = this._taaPass = new Pass({
         fragment: Shader.source('car.taa')
     });
-    taaPass.setUniform('velocityTex', opt.velocityTexture);
     taaPass.setUniform('depthTex', opt.depthTexture);
+
+    this._velocityTex = opt.velocityTexture;
 
     this._depthTex = opt.depthTexture;
 
@@ -138,6 +139,7 @@ TemporalSuperSampling.prototype = {
         // taaPass.setUniform('weight1', 0.9);
         // taaPass.setUniform('weight2', 0.1);
         // }
+        taaPass.setUniform('velocityTex', this._velocityTex);
         taaPass.setUniform('prevTex', this._prevFrameTex);
         taaPass.setUniform('currTex', this._sourceTex);
         taaPass.setUniform('texelSize', [1 / this._sourceTex.width, 1 / this._sourceTex.height]);
