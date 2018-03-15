@@ -7,6 +7,8 @@
 #define FLT_EPS 0.00000001
 #define MINMAX_4TAP_VARYING
 #define USE_CLIPPING
+#define USE_YCOCG
+#define USE_DILATION
 
 uniform sampler2D prevTex;
 uniform sampler2D currTex;
@@ -309,7 +311,6 @@ vec4 temporal_reprojection(vec2 ss_txc, vec2 ss_vel, float vs_dist)
     cmax.yz = chroma_center + chroma_extent;
     cavg.yz = chroma_center;
 #endif
-
     // clamp to neighbourhood of current sample
 #ifdef USE_CLIPPING
     texel1 = clip_aabb(cmin.xyz, cmax.xyz, clamp(cavg, cmin, cmax), texel1);
@@ -363,11 +364,11 @@ void main()
     float vs_dist = depth_resolve_linear(depth);
 #endif
     // Remove pixels moved too far.
-    if (length(velTexel.rg) > 0.5 || velTexel.a < 0.1) {
+    if (length(velTexel.rg - 0.5) > 0.5 || velTexel.a < 0.1) {
         gl_FragColor = texture2D(currTex, uv);
         return;
     }
-    vec2 ss_vel = velTexel.rg;
+    vec2 ss_vel = velTexel.rg - 0.5;
 
     // temporal resolve
     vec4 color_temporal = temporal_reprojection(v_Texcoord, ss_vel, vs_dist);
