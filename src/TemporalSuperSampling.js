@@ -5,7 +5,7 @@ var Pass = compositor.Pass;
 
 import halton from './halton';
 
-import TAAGLSLCode from './TAA.glsl.js';
+import TAAGLSLCode from './TAA2.glsl.js';
 
 Shader.import(TAAGLSLCode);
 
@@ -34,7 +34,7 @@ function TemporalSuperSampling (opt) {
     var taaPass = this._taaPass = new Pass({
         fragment: Shader.source('car.taa')
     });
-    taaPass.setUniform('depthTex', opt.depthTexture);
+    // taaPass.setUniform('depthTex', opt.depthTexture);
 
     this._velocityTex = opt.velocityTexture;
 
@@ -143,9 +143,9 @@ TemporalSuperSampling.prototype = {
         taaPass.setUniform('prevTex', this._prevFrameTex);
         taaPass.setUniform('currTex', this._sourceTex);
         taaPass.setUniform('texelSize', [1 / this._sourceTex.width, 1 / this._sourceTex.height]);
-        taaPass.setUniform('depthTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.height]);
-        taaPass.setUniform('sinTime', Math.sin(+(new Date()) / 8));
-        taaPass.setUniform('projection', camera.projectionMatrix.array);
+        taaPass.setUniform('velocityTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.height]);
+        // taaPass.setUniform('sinTime', Math.sin(+(new Date()) / 8));
+        // taaPass.setUniform('projection', camera.projectionMatrix.array);
 
         taaPass.setUniform('still', !!still);
 

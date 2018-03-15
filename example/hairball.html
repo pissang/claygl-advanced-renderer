@@ -1,0 +1,85 @@
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="../../claygl/dist/claygl.js"></script>
+    <!-- <script src="https://rawgit.com/pissang/claygl/master/dist/claygl.min.js"></script> -->
+    <script src="../dist/claygl-advanced-renderer.js"></script>
+    <title>Harball for TAA test</title>
+</head>
+<body>
+    <div id="main"></div>
+
+    <script type="text/javascript">
+        clay.application.create('#main', {
+            width: window.innerWidth,
+            height: window.innerHeight,
+
+            devicePixelRatio: 1,
+
+            autoRender: false,
+
+            init: function (app) {
+                this._advancedRenderer = new ClayAdvancedRenderer(app.renderer, app.scene, app.timeline, {
+                    shadow: false,
+                    postEffect: {
+                        bloom: {
+                            enable: false
+                        },
+                        screenSpaceAmbientOcclusion: {
+                            enable: false,
+                            // intensity: 2,
+                            radius: 1,
+                            // quality: 'ultra'
+                        }
+                    }
+                });
+
+                // Create a perspective camera.
+                // First parameter is the camera position. Which is in front of the cube.
+                // Second parameter is the camera lookAt target. Which is the origin of the world, and where the cube puts.
+                this._camera = app.createCamera([0, 2, 6], [0, 0, 0]);
+
+                // Create a directional light. The direction is from top right to left bottom, away from camera.
+                this._mainLight = app.createDirectionalLight([-1, -1, -1]);
+                this._mainLight.shadowResolution = 2048;
+
+                this._advancedRenderer.render();
+
+                this._control = new clay.plugin.OrbitControl({
+                    target: this._camera,
+                    domElement: app.container,
+                    timeline: app.timeline
+                });
+
+                this._control.on('update', function () {
+                    // this._advancedRenderer.render();
+                }, this);
+
+                // var plane = app.createPlane({
+                //     color: '#000',
+                //     roughness: 1
+                // });
+                // plane.position.z = -3;
+                // plane.scale.set(100, 100, 0);
+                // plane.castShadow = false;
+
+                var self = this;
+                app.loadModel('./asset/model/DamagedHelmet.glb').then(function (result) {
+                    result.materials.forEach(function (mat) {
+                        mat.set('roughness', 0.2);
+                        mat.set('metalness', 1);
+                    });
+                    self._advancedRenderer.render();
+                });
+
+                app.createAmbientCubemapLight('./asset/hdr/pisa.hdr', 0.6, 0.8, 2);
+            },
+
+            loop: function () {
+                this._advancedRenderer.render();
+            }
+        })
+    </script>
+</body>
+</html>

@@ -98,7 +98,7 @@ function SSAOPass(opt) {
     this._blurPass.material.setUniform('depthTex', this._depthTex);
 
 
-    this._temporalReprojection = true;
+    this._temporalReprojection = false;
 
     this._frame = 0;
 }

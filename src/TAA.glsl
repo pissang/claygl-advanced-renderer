@@ -5,7 +5,7 @@
 #define SHADER_NAME TAA
 
 #define FLT_EPS 0.00000001
-#define MINMAX_4TAP_VARYING
+#define MINMAX_3X3
 #define USE_CLIPPING
 #define USE_YCOCG
 #define USE_DILATION
