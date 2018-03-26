@@ -5,9 +5,15 @@
     <script src="../../claygl/dist/claygl.js"></script>
     <!-- <script src="https://rawgit.com/pissang/claygl/master/dist/claygl.min.js"></script> -->
     <script src="../dist/claygl-advanced-renderer.js"></script>
-    <title>Harball for TAA test</title>
+    <title>PBR</title>
 </head>
 <body>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
+
     <div id="main"></div>
 
     <script type="text/javascript">
@@ -21,16 +27,22 @@
 
             init: function (app) {
                 this._advancedRenderer = new ClayAdvancedRenderer(app.renderer, app.scene, app.timeline, {
-                    shadow: false,
+                    shadow: true,
+                    temporalSuperSampling: {
+                        enable: true
+                    },
                     postEffect: {
+                        enable: true,
                         bloom: {
                             enable: false
                         },
                         screenSpaceAmbientOcclusion: {
-                            enable: false,
-                            // intensity: 2,
-                            radius: 1,
-                            // quality: 'ultra'
+                            enable: true,
+                            intensity: 1,
+                            radius: 0.2
+                        },
+                        FXAA: {
+                            enable: true
                         }
                     }
                 });
@@ -38,7 +50,7 @@
                 // Create a perspective camera.
                 // First parameter is the camera position. Which is in front of the cube.
                 // Second parameter is the camera lookAt target. Which is the origin of the world, and where the cube puts.
-                this._camera = app.createCamera([0, 2, 6], [0, 0, 0]);
+                this._camera = app.createCamera([0, 1, 3], [0, 0, 0]);
 
                 // Create a directional light. The direction is from top right to left bottom, away from camera.
                 this._mainLight = app.createDirectionalLight([-1, -1, -1]);
@@ -53,31 +65,28 @@
                 });
 
                 this._control.on('update', function () {
-                    // this._advancedRenderer.render();
+                    this._advancedRenderer.render();
                 }, this);
 
-                // var plane = app.createPlane({
-                //     color: '#000',
-                //     roughness: 1
-                // });
-                // plane.position.z = -3;
-                // plane.scale.set(100, 100, 0);
-                // plane.castShadow = false;
-
                 var self = this;
-                app.loadModel('./asset/model/DamagedHelmet.glb').then(function (result) {
-                    result.materials.forEach(function (mat) {
-                        mat.set('roughness', 0.2);
-                        mat.set('metalness', 1);
-                    });
+                // app.loadModel('./asset/model/DamagedHelmet.glb').then(function (result) {
+                app.loadModel('./asset/model/shaderBall/shaderBall.gltf').then(function (result) {
+                    result.rootNode.scale.set(0.01, 0.01, 0.01);
                     self._advancedRenderer.render();
                 });
 
-                app.createAmbientCubemapLight('./asset/hdr/pisa.hdr', 0.6, 0.8, 2);
+                app.createAmbientCubemapLight('./asset/hdr/pisa.hdr', 1, 0.8, 2).then(function (result) {
+                    var skybox = new clay.plugin.Skybox({
+                        scene: app.scene
+                    });
+                    skybox.setEnvironmentMap(result.specular);
+                    skybox.material.define('fragment', 'RGBM_DECODE');
+                    self._advancedRenderer.render();
+                });
             },
 
             loop: function () {
-                this._advancedRenderer.render();
+                // this._advancedRenderer.render();
             }
         })
     </script>

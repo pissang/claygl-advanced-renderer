@@ -331,6 +331,7 @@ EffectCompositor.prototype.setSSAOParameter = function (name, value) {
             this._ssaoPass.setParameter('bias', value / 50);
             break;
         case 'intensity':
+        case 'temporalFilter':
             this._ssaoPass.setParameter(name, value);
             break;
     }

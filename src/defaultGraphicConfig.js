@@ -7,6 +7,8 @@ export default {
     },
 
     temporalSuperSampling: {
+        // If support dynamic scene
+        dynamic: true,
         enable: 'auto'
     },
 
@@ -46,7 +48,8 @@ export default {
             // Quality of SSAO. 'low'|'medium'|'high'|'ultra'
             quality: 'medium',
             // Intensity of SSAO
-            intensity: 1
+            intensity: 1,
+            temporalFilter: false
         },
         // Configuration about screen space reflection
         screenSpaceReflection: {

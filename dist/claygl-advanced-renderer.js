@@ -19,7 +19,7 @@ function halton(index, base) {
     return result;
 }
 
-var SSAOGLSLCode = "@export car.ssao.estimate\n#define SHADER_NAME SSAO\nuniform sampler2D depthTex;\nuniform sampler2D normalTex;\nuniform sampler2D noiseTex;\nuniform vec2 depthTexSize;\nuniform vec2 noiseTexSize;\nuniform mat4 projection;\nuniform mat4 projectionInv;\nuniform mat4 viewInverseTranspose;\nuniform vec3 kernel[KERNEL_SIZE];\nuniform float radius : 1;\nuniform float power : 1;\nuniform float bias: 0.01;\nuniform float intensity: 1.0;\nvarying vec2 v_Texcoord;\nfloat ssaoEstimator(in vec3 originPos, in vec3 N, in mat3 kernelBasis) {\n float occlusion = 0.0;\n for (int i = 0; i < KERNEL_SIZE; i++) {\n vec3 samplePos = kernel[i];\n#ifdef NORMALTEX_ENABLED\n samplePos = kernelBasis * samplePos;\n#endif\n samplePos = samplePos * radius + originPos;\n vec4 texCoord = projection * vec4(samplePos, 1.0);\n texCoord.xy /= texCoord.w;\n texCoord.xy = texCoord.xy * 0.5 + 0.5;\n vec4 depthTexel = texture2D(depthTex, texCoord.xy);\n float z = depthTexel.r * 2.0 - 1.0;\n#ifdef ALCHEMY\n vec4 projectedPos = vec4(texCoord.xy * 2.0 - 1.0, z, 1.0);\n vec4 p4 = projectionInv * projectedPos;\n p4.xyz /= p4.w;\n vec3 cDir = p4.xyz - originPos;\n float vv = dot(cDir, cDir);\n float vn = dot(cDir, N);\n float radius2 = radius * radius;\n vn = max(vn + p4.z * bias, 0.0);\n float f = max(radius2 - vv, 0.0) / radius2;\n occlusion += f * f * f * max(vn / (0.01 + vv), 0.0);\n#else\n if (projection[3][3] == 0.0) {\n z = projection[3][2] / (z * projection[2][3] - projection[2][2]);\n }\n else {\n z = (z - projection[3][2]) / projection[2][2];\n }\n float factor = step(samplePos.z, z - bias);\n float rangeCheck = smoothstep(0.0, 1.0, radius / abs(originPos.z - z));\n occlusion += rangeCheck * factor;\n#endif\n }\n#ifdef NORMALTEX_ENABLED\n occlusion = 1.0 - occlusion / float(KERNEL_SIZE);\n#else\n occlusion = 1.0 - clamp((occlusion / float(KERNEL_SIZE) - 0.6) * 2.5, 0.0, 1.0);\n#endif\n return pow(occlusion, power);\n}\nvoid main()\n{\n vec4 depthTexel = texture2D(depthTex, v_Texcoord);\n#ifdef NORMALTEX_ENABLED\n vec4 tex = texture2D(normalTex, v_Texcoord);\n if (dot(tex.rgb, tex.rgb) == 0.0) {\n gl_FragColor = vec4(1.0);\n return;\n }\n vec3 N = tex.rgb * 2.0 - 1.0;\n N = (viewInverseTranspose * vec4(N, 0.0)).xyz;\n vec2 noiseTexCoord = depthTexSize / vec2(noiseTexSize) * v_Texcoord;\n vec3 rvec = texture2D(noiseTex, noiseTexCoord).rgb * 2.0 - 1.0;\n vec3 T = normalize(rvec - N * dot(rvec, N));\n vec3 BT = normalize(cross(N, T));\n mat3 kernelBasis = mat3(T, BT, N);\n#else\n if (depthTexel.r > 0.99999) {\n gl_FragColor = vec4(1.0);\n return;\n }\n mat3 kernelBasis;\n#endif\n float z = depthTexel.r * 2.0 - 1.0;\n vec4 projectedPos = vec4(v_Texcoord * 2.0 - 1.0, z, 1.0);\n vec4 p4 = projectionInv * projectedPos;\n vec3 position = p4.xyz / p4.w;\n float ao = ssaoEstimator(position, N, kernelBasis);\n ao = clamp(1.0 - (1.0 - ao) * intensity, 0.0, 1.0);\n gl_FragColor = vec4(vec3(ao), 1.0);\n}\n@end\n@export car.ssao.blur\n#define SHADER_NAME SSAO_BLUR\nuniform sampler2D ssaoTexture;\n#ifdef NORMALTEX_ENABLED\nuniform sampler2D normalTex;\n#endif\nvarying vec2 v_Texcoord;\nuniform vec2 textureSize;\nuniform float blurSize : 1.0;\nuniform int direction: 0.0;\n#ifdef DEPTHTEX_ENABLED\nuniform sampler2D depthTex;\nuniform mat4 projection;\nuniform float depthRange : 0.05;\nfloat getLinearDepth(vec2 coord)\n{\n float depth = texture2D(depthTex, coord).r * 2.0 - 1.0;\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n}\n#endif\nvoid main()\n{\n float kernel[5];\n kernel[0] = 0.122581;\n kernel[1] = 0.233062;\n kernel[2] = 0.288713;\n kernel[3] = 0.233062;\n kernel[4] = 0.122581;\n vec2 off = vec2(0.0);\n if (direction == 0) {\n off[0] = blurSize / textureSize.x;\n }\n else {\n off[1] = blurSize / textureSize.y;\n }\n vec2 coord = v_Texcoord;\n float sum = 0.0;\n float weightAll = 0.0;\n#ifdef NORMALTEX_ENABLED\n vec3 centerNormal = texture2D(normalTex, v_Texcoord).rgb * 2.0 - 1.0;\n#endif\n#if defined(DEPTHTEX_ENABLED)\n float centerDepth = getLinearDepth(v_Texcoord);\n#endif\n for (int i = 0; i < 5; i++) {\n vec2 coord = clamp(v_Texcoord + vec2(float(i) - 2.0) * off, vec2(0.0), vec2(1.0));\n float w = kernel[i];\n#ifdef NORMALTEX_ENABLED\n vec3 normal = texture2D(normalTex, coord).rgb * 2.0 - 1.0;\n w *= clamp(dot(normal, centerNormal), 0.0, 1.0);\n#endif\n#ifdef DEPTHTEX_ENABLED\n float d = getLinearDepth(coord);\n w *= (1.0 - smoothstep(abs(centerDepth - d) / depthRange, 0.0, 1.0));\n#endif\n weightAll += w;\n sum += texture2D(ssaoTexture, coord).r * w;\n }\n gl_FragColor = vec4(vec3(sum / weightAll), 1.0);\n}\n@end\n";
+var SSAOGLSLCode = "@export car.ssao.estimate\n#define SHADER_NAME SSAO\nuniform sampler2D depthTex;\nuniform sampler2D normalTex;\nuniform sampler2D noiseTex;\nuniform vec2 depthTexSize;\nuniform vec2 noiseTexSize;\nuniform mat4 projection;\nuniform mat4 projectionInv;\nuniform mat4 viewInverseTranspose;\nuniform vec3 kernel[KERNEL_SIZE];\nuniform float radius : 1;\nuniform float power : 1;\nuniform float bias: 0.01;\nuniform float intensity: 1.0;\nvarying vec2 v_Texcoord;\nfloat ssaoEstimator(in vec3 originPos, in vec3 N, in mat3 kernelBasis) {\n float occlusion = 0.0;\n for (int i = 0; i < KERNEL_SIZE; i++) {\n vec3 samplePos = kernel[i];\n#ifdef NORMALTEX_ENABLED\n samplePos = kernelBasis * samplePos;\n#endif\n samplePos = samplePos * radius + originPos;\n vec4 texCoord = projection * vec4(samplePos, 1.0);\n texCoord.xy /= texCoord.w;\n texCoord.xy = texCoord.xy * 0.5 + 0.5;\n vec4 depthTexel = texture2D(depthTex, texCoord.xy);\n float z = depthTexel.r * 2.0 - 1.0;\n#ifdef ALCHEMY\n vec4 projectedPos = vec4(texCoord.xy * 2.0 - 1.0, z, 1.0);\n vec4 p4 = projectionInv * projectedPos;\n p4.xyz /= p4.w;\n vec3 cDir = p4.xyz - originPos;\n float vv = dot(cDir, cDir);\n float vn = dot(cDir, N);\n float radius2 = radius * radius;\n vn = max(vn + p4.z * bias, 0.0);\n float f = max(radius2 - vv, 0.0) / radius2;\n occlusion += f * f * f * max(vn / (0.01 + vv), 0.0);\n#else\n if (projection[3][3] == 0.0) {\n z = projection[3][2] / (z * projection[2][3] - projection[2][2]);\n }\n else {\n z = (z - projection[3][2]) / projection[2][2];\n }\n float factor = step(samplePos.z, z - bias);\n float rangeCheck = smoothstep(0.0, 1.0, radius / abs(originPos.z - z));\n occlusion += rangeCheck * factor;\n#endif\n }\n#ifdef NORMALTEX_ENABLED\n occlusion = 1.0 - occlusion / float(KERNEL_SIZE);\n#else\n occlusion = 1.0 - clamp((occlusion / float(KERNEL_SIZE) - 0.6) * 2.5, 0.0, 1.0);\n#endif\n return pow(occlusion, power);\n}\nvoid main()\n{\n vec2 uv = v_Texcoord;\n vec4 depthTexel = texture2D(depthTex, uv);\n#ifdef NORMALTEX_ENABLED\n vec2 texelSize = 1.0 / depthTexSize;\n vec4 tex = texture2D(normalTex, uv);\n vec3 r = texture2D(normalTex, uv + vec2(texelSize.x, 0.0)).rgb;\n vec3 l = texture2D(normalTex, uv + vec2(-texelSize.x, 0.0)).rgb;\n vec3 t = texture2D(normalTex, uv + vec2(0.0, -texelSize.y)).rgb;\n vec3 b = texture2D(normalTex, uv + vec2(0.0, texelSize.y)).rgb;\n if (dot(tex.rgb, tex.rgb) == 0.0\n || dot(r, r) == 0.0 || dot(l, l) == 0.0\n || dot(t, t) == 0.0 || dot(b, b) == 0.0\n ) {\n gl_FragColor = vec4(1.0);\n return;\n }\n vec3 N = tex.rgb * 2.0 - 1.0;\n N = (viewInverseTranspose * vec4(N, 0.0)).xyz;\n vec2 noiseTexCoord = depthTexSize / vec2(noiseTexSize) * uv;\n vec3 rvec = texture2D(noiseTex, noiseTexCoord).rgb * 2.0 - 1.0;\n vec3 T = normalize(rvec - N * dot(rvec, N));\n vec3 BT = normalize(cross(N, T));\n mat3 kernelBasis = mat3(T, BT, N);\n#else\n if (depthTexel.r > 0.99999) {\n gl_FragColor = vec4(1.0);\n return;\n }\n mat3 kernelBasis;\n#endif\n float z = depthTexel.r * 2.0 - 1.0;\n vec4 projectedPos = vec4(uv * 2.0 - 1.0, z, 1.0);\n vec4 p4 = projectionInv * projectedPos;\n vec3 position = p4.xyz / p4.w;\n float ao = ssaoEstimator(position, N, kernelBasis);\n ao = clamp(1.0 - (1.0 - ao) * intensity, 0.0, 1.0);\n gl_FragColor = vec4(vec3(ao), 1.0);\n}\n@end\n@export car.ssao.blur\n#define SHADER_NAME SSAO_BLUR\nuniform sampler2D ssaoTexture;\n#ifdef NORMALTEX_ENABLED\nuniform sampler2D normalTex;\n#endif\nvarying vec2 v_Texcoord;\nuniform vec2 textureSize;\nuniform float blurSize : 1.0;\nuniform int direction: 0.0;\n#ifdef DEPTHTEX_ENABLED\nuniform sampler2D depthTex;\nuniform mat4 projection;\nuniform float depthRange : 0.05;\nfloat getLinearDepth(vec2 coord)\n{\n float depth = texture2D(depthTex, coord).r * 2.0 - 1.0;\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n}\n#endif\nvoid main()\n{\n float kernel[5];\n kernel[0] = 0.122581;\n kernel[1] = 0.233062;\n kernel[2] = 0.288713;\n kernel[3] = 0.233062;\n kernel[4] = 0.122581;\n vec2 off = vec2(0.0);\n if (direction == 0) {\n off[0] = blurSize / textureSize.x;\n }\n else {\n off[1] = blurSize / textureSize.y;\n }\n vec2 coord = v_Texcoord;\n float sum = 0.0;\n float weightAll = 0.0;\n#ifdef NORMALTEX_ENABLED\n vec3 centerNormal = texture2D(normalTex, v_Texcoord).rgb * 2.0 - 1.0;\n#endif\n#if defined(DEPTHTEX_ENABLED)\n float centerDepth = getLinearDepth(v_Texcoord);\n#endif\n for (int i = 0; i < 5; i++) {\n vec2 coord = clamp(v_Texcoord + vec2(float(i) - 2.0) * off, vec2(0.0), vec2(1.0));\n float w = kernel[i];\n#ifdef NORMALTEX_ENABLED\n vec3 normal = texture2D(normalTex, coord).rgb * 2.0 - 1.0;\n w *= clamp(dot(normal, centerNormal), 0.0, 1.0);\n#endif\n#ifdef DEPTHTEX_ENABLED\n float d = getLinearDepth(coord);\n w *= (1.0 - smoothstep(abs(centerDepth - d) / depthRange, 0.0, 1.0));\n#endif\n weightAll += w;\n sum += texture2D(ssaoTexture, coord).r * w;\n }\n gl_FragColor = vec4(vec3(sum / weightAll), 1.0);\n}\n@end\n";
 
 var Pass = claygl.compositor.Pass;
 claygl.Shader.import(SSAOGLSLCode);
@@ -113,6 +113,11 @@ function SSAOPass(opt) {
 
     this._blurPass.material.setUniform('normalTex', this._normalTex);
     this._blurPass.material.setUniform('depthTex', this._depthTex);
+
+
+    this._temporalFilter = true;
+
+    this._frame = 0;
 }
 
 SSAOPass.prototype.setDepthTexture = function (depthTex) {
@@ -126,7 +131,7 @@ SSAOPass.prototype.setNormalTexture = function (normalTex) {
     this.setKernelSize(this._kernelSize);
 };
 
-SSAOPass.prototype.update = function (renderer, camera$$1, frame) {
+SSAOPass.prototype.update = function (renderer, camera, frame) {
 
     var width = renderer.getWidth();
     var height = renderer.getHeight();
@@ -135,7 +140,11 @@ SSAOPass.prototype.update = function (renderer, camera$$1, frame) {
     var blurPass = this._blurPass;
     var blendPass = this._blendPass;
 
-    ssaoPass.setUniform('kernel', this._kernels[frame % this._kernels.length]);
+    this._frame++;
+
+    ssaoPass.setUniform('kernel', this._kernels[
+        this._temporalFilter ? (this._frame % this._kernels.length) : 0
+    ]);
     ssaoPass.setUniform('depthTex', this._depthTex);
     if (this._normalTex != null) {
         ssaoPass.setUniform('normalTex', this._normalTex);
@@ -143,10 +152,10 @@ SSAOPass.prototype.update = function (renderer, camera$$1, frame) {
     ssaoPass.setUniform('depthTexSize', [this._depthTex.width, this._depthTex.height]);
 
     var viewInverseTranspose = new claygl.Matrix4();
-    claygl.Matrix4.transpose(viewInverseTranspose, camera$$1.worldTransform);
+    claygl.Matrix4.transpose(viewInverseTranspose, camera.worldTransform);
 
-    ssaoPass.setUniform('projection', camera$$1.projectionMatrix.array);
-    ssaoPass.setUniform('projectionInv', camera$$1.invProjectionMatrix.array);
+    ssaoPass.setUniform('projection', camera.projectionMatrix.array);
+    ssaoPass.setUniform('projectionInv', camera.invProjectionMatrix.array);
     ssaoPass.setUniform('viewInverseTranspose', viewInverseTranspose.array);
 
     var ssaoTexture = this._ssaoTexture;
@@ -170,17 +179,19 @@ SSAOPass.prototype.update = function (renderer, camera$$1, frame) {
     renderer.gl.clear(renderer.gl.COLOR_BUFFER_BIT);
     ssaoPass.render(renderer);
 
-    // this._framebuffer.attach(currTexture);
-    // blendPass.setUniform('prevTex', prevTexture);
-    // blendPass.setUniform('currTex', ssaoTexture);
-    // blendPass.setUniform('velocityTex', this._velocityTex);
-    // blendPass.render(renderer);
+    if (this._temporalFilter) {
+        this._framebuffer.attach(currTexture);
+        blendPass.setUniform('prevTex', prevTexture);
+        blendPass.setUniform('currTex', ssaoTexture);
+        blendPass.setUniform('velocityTex', this._velocityTex);
+        blendPass.render(renderer);
+    }
 
     blurPass.setUniform('textureSize', [width, height]);
-    blurPass.setUniform('projection', camera$$1.projectionMatrix.array);
+    blurPass.setUniform('projection', camera.projectionMatrix.array);
     this._framebuffer.attach(blurTexture);
     blurPass.setUniform('direction', 0);
-    blurPass.setUniform('ssaoTexture', ssaoTexture);
+    blurPass.setUniform('ssaoTexture', this._temporalFilter ? currTexture : ssaoTexture);
     blurPass.render(renderer);
 
     this._framebuffer.attach(ssaoTexture);
@@ -195,10 +206,9 @@ SSAOPass.prototype.update = function (renderer, camera$$1, frame) {
     renderer.gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
 
     // Swap texture
-
-    // var tmp = this._prevTexture;
-    // this._prevTexture = this._currTexture;
-    // this._currTexture = tmp;
+    var tmp = this._prevTexture;
+    this._prevTexture = this._currTexture;
+    this._currTexture = tmp;
 };
 
 SSAOPass.prototype.getTargetTexture = function () {
@@ -214,6 +224,9 @@ SSAOPass.prototype.setParameter = function (name, val) {
     }
     else if (name === 'intensity') {
         this._ssaoPass.material.set('intensity', val);
+    }
+    else if (name === 'temporalFilter') {
+        this._temporalFilter = val;
     }
     else {
         this._ssaoPass.setUniform(name, val);
@@ -247,6 +260,8 @@ SSAOPass.prototype.setNoiseSize = function (size) {
 SSAOPass.prototype.dispose = function (renderer) {
     this._blurTexture.dispose(renderer);
     this._ssaoTexture.dispose(renderer);
+    this._prevTexture.dispose(renderer);
+    this._currTexture.dispose(renderer);
 };
 
 SSAOPass.prototype.isFinished = function (frame) {
@@ -352,7 +367,7 @@ SSRPass.prototype.setAmbientCubemap = function (specularCubemap, brdfLookup, spe
     this._ssrPass.material[enableSpecularMap ? 'enableTexture' : 'disableTexture']('specularCubemap');
 };
 
-SSRPass.prototype.update = function (renderer, camera$$1, sourceTexture, frame) {
+SSRPass.prototype.update = function (renderer, camera, sourceTexture, frame) {
     var width = renderer.getWidth();
     var height = renderer.getHeight();
     var ssrTexture = this._ssrTexture;
@@ -373,15 +388,15 @@ SSRPass.prototype.update = function (renderer, camera$$1, sourceTexture, frame) 
 
     var toViewSpace = new claygl.Matrix4();
     var toWorldSpace = new claygl.Matrix4();
-    claygl.Matrix4.transpose(toViewSpace, camera$$1.worldTransform);
-    claygl.Matrix4.transpose(toWorldSpace, camera$$1.viewMatrix);
+    claygl.Matrix4.transpose(toViewSpace, camera.worldTransform);
+    claygl.Matrix4.transpose(toWorldSpace, camera.viewMatrix);
 
     ssrPass.setUniform('sourceTexture', sourceTexture);
-    ssrPass.setUniform('projection', camera$$1.projectionMatrix.array);
-    ssrPass.setUniform('projectionInv', camera$$1.invProjectionMatrix.array);
+    ssrPass.setUniform('projection', camera.projectionMatrix.array);
+    ssrPass.setUniform('projectionInv', camera.invProjectionMatrix.array);
     ssrPass.setUniform('toViewSpace', toViewSpace.array);
     ssrPass.setUniform('toWorldSpace', toWorldSpace.array);
-    ssrPass.setUniform('nearZ', camera$$1.near);
+    ssrPass.setUniform('nearZ', camera.near);
 
     var percent = frame / this._totalSamples * this._samplePerFrame;
     ssrPass.setUniform('jitterOffset', percent);
@@ -392,8 +407,8 @@ SSRPass.prototype.update = function (renderer, camera$$1, sourceTexture, frame) 
     blurPass2.setUniform('textureSize', [width, height]);
     blurPass2.setUniform('sourceTexture', sourceTexture);
 
-    blurPass1.setUniform('projection', camera$$1.projectionMatrix.array);
-    blurPass2.setUniform('projection', camera$$1.projectionMatrix.array);
+    blurPass1.setUniform('projection', camera.projectionMatrix.array);
+    blurPass2.setUniform('projection', camera.projectionMatrix.array);
 
     frameBuffer.attach(ssrTexture);
     frameBuffer.bind(renderer);
@@ -1096,7 +1111,7 @@ var effectJson = {
 
 var dofCode = "@export car.dof.coc\nuniform sampler2D depth;\nuniform float zNear: 0.1;\nuniform float zFar: 2000;\nuniform float focalDistance: 3;\nuniform float focalRange: 1;\nuniform float focalLength: 30;\nuniform float fstop: 2.8;\nvarying vec2 v_Texcoord;\n@import clay.util.encode_float\nvoid main()\n{\n float z = texture2D(depth, v_Texcoord).r * 2.0 - 1.0;\n float dist = 2.0 * zNear * zFar / (zFar + zNear - z * (zFar - zNear));\n float aperture = focalLength / fstop;\n float coc;\n float uppper = focalDistance + focalRange;\n float lower = focalDistance - focalRange;\n if (dist <= uppper && dist >= lower) {\n coc = 0.5;\n }\n else {\n float focalAdjusted = dist > uppper ? uppper : lower;\n coc = abs(aperture * (focalLength * (dist - focalAdjusted)) / (dist * (focalAdjusted - focalLength)));\n coc = clamp(coc, 0.0, 2.0) / 2.00001;\n if (dist < lower) {\n coc = -coc;\n }\n coc = coc * 0.5 + 0.5;\n }\n gl_FragColor = encodeFloat(coc);\n}\n@end\n@export car.dof.composite\n#define DEBUG 0\nuniform sampler2D original;\nuniform sampler2D blurred;\nuniform sampler2D nearfield;\nuniform sampler2D coc;\nuniform sampler2D nearcoc;\nvarying vec2 v_Texcoord;\n@import clay.util.rgbm\n@import clay.util.float\nvoid main()\n{\n vec4 blurredColor = decodeHDR(texture2D(blurred, v_Texcoord));\n vec4 originalColor = decodeHDR(texture2D(original, v_Texcoord));\n float fCoc = decodeFloat(texture2D(coc, v_Texcoord));\n fCoc = abs(fCoc * 2.0 - 1.0);\n float weight = smoothstep(0.0, 1.0, fCoc);\n#ifdef NEARFIELD_ENABLED\n vec4 nearfieldColor = decodeHDR(texture2D(nearfield, v_Texcoord));\n float fNearCoc = decodeFloat(texture2D(nearcoc, v_Texcoord));\n fNearCoc = abs(fNearCoc * 2.0 - 1.0);\n gl_FragColor = encodeHDR(\n mix(\n nearfieldColor, mix(originalColor, blurredColor, weight),\n pow(1.0 - fNearCoc, 4.0)\n )\n );\n#else\n gl_FragColor = encodeHDR(mix(originalColor, blurredColor, weight));\n#endif\n}\n@end\n@export car.dof.diskBlur\n#define POISSON_KERNEL_SIZE 16;\nuniform sampler2D texture;\nuniform sampler2D coc;\nvarying vec2 v_Texcoord;\nuniform float blurRadius : 10.0;\nuniform vec2 textureSize : [512.0, 512.0];\nuniform vec2 poissonKernel[POISSON_KERNEL_SIZE];\nuniform float percent;\nfloat nrand(const in vec2 n) {\n return fract(sin(dot(n.xy ,vec2(12.9898,78.233))) * 43758.5453);\n}\n@import clay.util.rgbm\n@import clay.util.float\nvoid main()\n{\n vec2 offset = blurRadius / textureSize;\n float rnd = 6.28318 * nrand(v_Texcoord + 0.07 * percent );\n float cosa = cos(rnd);\n float sina = sin(rnd);\n vec4 basis = vec4(cosa, -sina, sina, cosa);\n#if !defined(BLUR_NEARFIELD) && !defined(BLUR_COC)\n offset *= abs(decodeFloat(texture2D(coc, v_Texcoord)) * 2.0 - 1.0);\n#endif\n#ifdef BLUR_COC\n float cocSum = 0.0;\n#else\n vec4 color = vec4(0.0);\n#endif\n float weightSum = 0.0;\n for (int i = 0; i < POISSON_KERNEL_SIZE; i++) {\n vec2 ofs = poissonKernel[i];\n ofs = vec2(dot(ofs, basis.xy), dot(ofs, basis.zw));\n vec2 uv = v_Texcoord + ofs * offset;\n vec4 texel = texture2D(texture, uv);\n float w = 1.0;\n#ifdef BLUR_COC\n float fCoc = decodeFloat(texel) * 2.0 - 1.0;\n cocSum += clamp(fCoc, -1.0, 0.0) * w;\n#else\n texel = decodeHDR(texel);\n #if !defined(BLUR_NEARFIELD)\n float fCoc = decodeFloat(texture2D(coc, uv)) * 2.0 - 1.0;\n w *= abs(fCoc);\n #endif\n color += texel * w;\n#endif\n weightSum += w;\n }\n#ifdef BLUR_COC\n gl_FragColor = encodeFloat(clamp(cocSum / weightSum, -1.0, 0.0) * 0.5 + 0.5);\n#else\n color /= weightSum;\n gl_FragColor = encodeHDR(color);\n#endif\n}\n@end";
 
-var temporalBlendCode = "@export car.temporalBlend\nuniform sampler2D prevTex;\nuniform sampler2D currTex;\nuniform sampler2D velocityTex;\nvarying vec2 v_Texcoord;\nvoid main() {\n vec4 vel = texture2D(velocityTex, v_Texcoord);\n vec4 curr = texture2D(currTex, v_Texcoord);\n vec4 prev = texture2D(prevTex, v_Texcoord - vel.rg);\n if (length(vel.rg) > 0.1 || vel.a < 0.01) {\n gl_FragColor = curr;\n }\n else {\n gl_FragColor = mix(prev, curr, 0.1);\n }\n}\n@end";
+var temporalBlendCode = "@export car.temporalBlend\nuniform sampler2D prevTex;\nuniform sampler2D currTex;\nuniform sampler2D velocityTex;\nuniform float weight = 0.1;\nvarying vec2 v_Texcoord;\nvoid main() {\n vec4 vel = texture2D(velocityTex, v_Texcoord);\n vec4 curr = texture2D(currTex, v_Texcoord);\n vec4 prev = texture2D(prevTex, v_Texcoord - vel.rg + 0.5);\n if (length(vel.rg - 0.5) > 0.1 || vel.a < 0.01) {\n gl_FragColor = curr;\n }\n else {\n gl_FragColor = mix(prev, curr, weight);\n }\n}\n@end";
 
 var GBuffer = claygl.deferred.GBuffer;
 
@@ -1186,7 +1201,8 @@ EffectCompositor.prototype.resize = function (width, height, dpr) {
 };
 
 EffectCompositor.prototype._ifRenderNormalPass = function () {
-    return this._enableSSAO || this._enableEdge || this._enableSSR;
+    // return this._enableSSAO || this._enableEdge || this._enableSSR;
+    return true;
 };
 
 EffectCompositor.prototype._getPrevNode = function (node) {
@@ -1244,17 +1260,17 @@ EffectCompositor.prototype._removeChainNode = function (node) {
 /**
  * Update normal
  */
-EffectCompositor.prototype.updateGBuffer = function (renderer, scene, camera$$1, frame) {
+EffectCompositor.prototype.updateGBuffer = function (renderer, scene, camera, frame) {
     if (this._ifRenderNormalPass()) {
-        this._gBufferPass.update(renderer, scene, camera$$1);
+        this._gBufferPass.update(renderer, scene, camera);
     }
 };
 
 /**
  * Render SSAO after render the scene, before compositing
  */
-EffectCompositor.prototype.updateSSAO = function (renderer, scene, camera$$1, frame) {
-    this._ssaoPass.update(renderer, camera$$1, frame);
+EffectCompositor.prototype.updateSSAO = function (renderer, scene, camera, frame) {
+    this._ssaoPass.update(renderer, camera, frame);
 };
 
 /**
@@ -1419,6 +1435,7 @@ EffectCompositor.prototype.setSSAOParameter = function (name, value) {
             this._ssaoPass.setParameter('bias', value / 50);
             break;
         case 'intensity':
+        case 'temporalFilter':
             this._ssaoPass.setParameter(name, value);
             break;
     }
@@ -1516,13 +1533,13 @@ EffectCompositor.prototype.setColorCorrection = function (type, value) {
     this._compositeNode.setParameter(type, value);
 };
 
-EffectCompositor.prototype.composite = function (renderer, scene, camera$$1, framebuffer, frame) {
+EffectCompositor.prototype.composite = function (renderer, scene, camera, framebuffer, frame) {
 
     var sourceTexture = this._sourceTexture;
     var targetTexture = sourceTexture;
 
     if (this._enableSSR) {
-        this._ssrPass.update(renderer, camera$$1, sourceTexture, frame);
+        this._ssrPass.update(renderer, camera, sourceTexture, frame);
         targetTexture = this._ssrPass.getTargetTexture();
 
         this._ssrPass.setSSAOTexture(
@@ -1558,8 +1575,8 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera$$1, fra
         this._dofBlurNodes[i].setParameter('poissonKernel', blurKernel);
     }
 
-    this._cocNode.setParameter('zNear', camera$$1.near);
-    this._cocNode.setParameter('zFar', camera$$1.far);
+    this._cocNode.setParameter('zNear', camera.near);
+    this._cocNode.setParameter('zFar', camera.far);
 
     this._compositor.render(renderer, framebuffer);
 };
@@ -1586,7 +1603,7 @@ EffectCompositor.prototype.dispose = function (renderer) {
     this._ssaoPass.dispose(renderer);
 };
 
-var TAAGLSLCode = "\n@export car.taa\n#define SHADER_NAME TAA\n#define FLT_EPS 0.00000001\n#define MINMAX_3X3\n#define USE_CLIPPING\n#define USE_DILATION\nuniform sampler2D prevTex;\nuniform sampler2D currTex;\nuniform sampler2D velocityTex;\nuniform sampler2D depthTex;\nuniform bool still;\nuniform float sinTime;\nuniform float motionScale;\nuniform float feedbackMin: 0.88;\nuniform float feedbackMax: 0.97;\nuniform mat4 projection;\nuniform vec2 texelSize;\nuniform vec2 depthTexelSize;\nvarying vec2 v_Texcoord;\nconst vec3 w = vec3(0.2125, 0.7154, 0.0721);\nfloat depth_resolve_linear(float depth) {\n if (projection[3][3] == 0.0) {\n return projection[3][2] / (depth * projection[2][3] - projection[2][2]);\n }\n else {\n return (depth - projection[3][2]) / projection[2][2];\n }\n}\nvec3 find_closest_fragment_3x3(vec2 uv)\n{\n\tvec2 dd = abs(depthTexelSize.xy);\n\tvec2 du = vec2(dd.x, 0.0);\n\tvec2 dv = vec2(0.0, dd.y);\n\tvec3 dtl = vec3(-1, -1, texture2D(depthTex, uv - dv - du).x);\n\tvec3 dtc = vec3( 0, -1, texture2D(depthTex, uv - dv).x);\n\tvec3 dtr = vec3( 1, -1, texture2D(depthTex, uv - dv + du).x);\n\tvec3 dml = vec3(-1, 0, texture2D(depthTex, uv - du).x);\n\tvec3 dmc = vec3( 0, 0, texture2D(depthTex, uv).x);\n\tvec3 dmr = vec3( 1, 0, texture2D(depthTex, uv + du).x);\n\tvec3 dbl = vec3(-1, 1, texture2D(depthTex, uv + dv - du).x);\n\tvec3 dbc = vec3( 0, 1, texture2D(depthTex, uv + dv).x);\n\tvec3 dbr = vec3( 1, 1, texture2D(depthTex, uv + dv + du).x);\n\tvec3 dmin = dtl;\n\tif (dmin.z > dtc.z) dmin = dtc;\n\tif (dmin.z > dtr.z) dmin = dtr;\n\tif (dmin.z > dml.z) dmin = dml;\n\tif (dmin.z > dmc.z) dmin = dmc;\n\tif (dmin.z > dmr.z) dmin = dmr;\n\tif (dmin.z > dbl.z) dmin = dbl;\n\tif (dmin.z > dbc.z) dmin = dbc;\n\tif (dmin.z > dbr.z) dmin = dbr;\n\treturn vec3(uv + dd.xy * dmin.xy, dmin.z);\n}\nfloat PDnrand( vec2 n ) {\n\treturn fract( sin(dot(n.xy, vec2(12.9898, 78.233)))* 43758.5453 );\n}\nvec2 PDnrand2( vec2 n ) {\n\treturn fract( sin(dot(n.xy, vec2(12.9898, 78.233)))* vec2(43758.5453, 28001.8384) );\n}\nvec3 PDnrand3( vec2 n ) {\n\treturn fract( sin(dot(n.xy, vec2(12.9898, 78.233)))* vec3(43758.5453, 28001.8384, 50849.4141 ) );\n}\nvec4 PDnrand4( vec2 n ) {\n\treturn fract( sin(dot(n.xy, vec2(12.9898, 78.233)))* vec4(43758.5453, 28001.8384, 50849.4141, 12996.89) );\n}\nfloat PDsrand( vec2 n ) {\n\treturn PDnrand( n ) * 2.0 - 1.0;\n}\nvec2 PDsrand2( vec2 n ) {\n\treturn PDnrand2( n ) * 2.0 - 1.0;\n}\nvec3 PDsrand3( vec2 n ) {\n\treturn PDnrand3( n ) * 2.0 - 1.0;\n}\nvec4 PDsrand4( vec2 n ) {\n\treturn PDnrand4( n ) * 2.0 - 1.0;\n}\nvec3 RGB_YCoCg(vec3 c)\n{\n return vec3(\n c.x/4.0 + c.y/2.0 + c.z/4.0,\n c.x/2.0 - c.z/2.0,\n -c.x/4.0 + c.y/2.0 - c.z/4.0\n );\n}\nvec3 YCoCg_RGB(vec3 c)\n{\n return clamp(vec3(\n c.x + c.y - c.z,\n c.x + c.z,\n c.x - c.y - c.z\n ), vec3(0.0), vec3(1.0));\n}\nvec4 sample_color(sampler2D tex, vec2 uv)\n{\n#ifdef USE_YCOCG\n vec4 c = texture2D(tex, uv);\n return vec4(RGB_YCoCg(c.rgb), c.a);\n#else\n return texture2D(tex, uv);\n#endif\n}\nvec4 resolve_color(vec4 c)\n{\n#ifdef USE_YCOCG\n return vec4(YCoCg_RGB(c.rgb).rgb, c.a);\n#else\n return c;\n#endif\n}\nvec4 clip_aabb(vec3 aabb_min, vec3 aabb_max, vec4 p, vec4 q)\n{\n vec4 r = q - p;\n vec3 rmax = aabb_max - p.xyz;\n vec3 rmin = aabb_min - p.xyz;\n const float eps = FLT_EPS;\n if (r.x > rmax.x + eps)\n r *= (rmax.x / r.x);\n if (r.y > rmax.y + eps)\n r *= (rmax.y / r.y);\n if (r.z > rmax.z + eps)\n r *= (rmax.z / r.z);\n if (r.x < rmin.x - eps)\n r *= (rmin.x / r.x);\n if (r.y < rmin.y - eps)\n r *= (rmin.y / r.y);\n if (r.z < rmin.z - eps)\n r *= (rmin.z / r.z);\n return p + r;\n}\nvec4 sample_color_motion(sampler2D tex, vec2 uv, vec2 ss_vel)\n{\n vec2 v = 0.5 * ss_vel;\n float srand = PDsrand(uv + vec2(sinTime));\n vec2 vtap = v / 3.0;\n vec2 pos0 = uv + vtap * (0.5 * srand);\n vec4 accu = vec4(0.0);\n float wsum = 0.0;\n for (int i = -3; i <= 3; i++)\n {\n float w = 1.0; accu += w * sample_color(tex, pos0 + float(i) * vtap);\n wsum += w;\n }\n return accu / wsum;\n}\nvec4 temporal_reprojection(vec2 ss_txc, vec2 ss_vel, float vs_dist)\n{\n vec4 texel0 = sample_color(currTex, ss_txc);\n vec4 texel1 = sample_color(prevTex, ss_txc - ss_vel);\n vec2 uv = v_Texcoord;\n#if defined(MINMAX_3X3) || defined(MINMAX_3X3_ROUNDED)\n vec2 du = vec2(texelSize.x, 0.0);\n vec2 dv = vec2(0.0, texelSize.y);\n vec4 ctl = sample_color(currTex, uv - dv - du);\n vec4 ctc = sample_color(currTex, uv - dv);\n vec4 ctr = sample_color(currTex, uv - dv + du);\n vec4 cml = sample_color(currTex, uv - du);\n vec4 cmc = sample_color(currTex, uv);\n vec4 cmr = sample_color(currTex, uv + du);\n vec4 cbl = sample_color(currTex, uv + dv - du);\n vec4 cbc = sample_color(currTex, uv + dv);\n vec4 cbr = sample_color(currTex, uv + dv + du);\n vec4 cmin = min(ctl, min(ctc, min(ctr, min(cml, min(cmc, min(cmr, min(cbl, min(cbc, cbr))))))));\n vec4 cmax = max(ctl, max(ctc, max(ctr, max(cml, max(cmc, max(cmr, max(cbl, max(cbc, cbr))))))));\n #if defined(MINMAX_3X3_ROUNDED) || defined(USE_YCOCG) || defined(USE_CLIPPING)\n vec4 cavg = (ctl + ctc + ctr + cml + cmc + cmr + cbl + cbc + cbr) / 9.0;\n #endif\n #ifdef MINMAX_3X3_ROUNDED\n vec4 cmin5 = min(ctc, min(cml, min(cmc, min(cmr, cbc))));\n vec4 cmax5 = max(ctc, max(cml, max(cmc, max(cmr, cbc))));\n vec4 cavg5 = (ctc + cml + cmc + cmr + cbc) / 5.0;\n cmin = 0.5 * (cmin + cmin5);\n cmax = 0.5 * (cmax + cmax5);\n cavg = 0.5 * (cavg + cavg5);\n #endif\n#elif defined(MINMAX_4TAP_VARYING)\n const float _SubpixelThreshold = 0.5;\n const float _GatherBase = 0.5;\n const float _GatherSubpixelMotion = 0.1666;\n vec2 texel_vel = ss_vel / depthTexelSize.xy;\n float texel_vel_mag = length(texel_vel) * vs_dist;\n float k_subpixel_motion = saturate(_SubpixelThreshold / (FLT_EPS + texel_vel_mag));\n float k_min_max_support = _GatherBase + _GatherSubpixelMotion * k_subpixel_motion;\n vec2 ss_offset01 = k_min_max_support * vec2(-texelSize.x, texelSize.y);\n vec2 ss_offset11 = k_min_max_support * vec2(texelSize.x, texelSize.y);\n vec4 c00 = sample_color(currTex, uv - ss_offset11);\n vec4 c10 = sample_color(currTex, uv - ss_offset01);\n vec4 c01 = sample_color(currTex, uv + ss_offset01);\n vec4 c11 = sample_color(currTex, uv + ss_offset11);\n vec4 cmin = min(c00, min(c10, min(c01, c11)));\n vec4 cmax = max(c00, max(c10, max(c01, c11)));\n #ifdef USE_YCOCG || USE_CLIPPING\n vec4 cavg = (c00 + c10 + c01 + c11) / 4.0;\n #endif\n#endif\n#ifdef USE_YCOCG\n vec2 chroma_extent = vec2(0.25 * 0.5 * (cmax.r - cmin.r));\n vec2 chroma_center = texel0.gb;\n cmin.yz = chroma_center - chroma_extent;\n cmax.yz = chroma_center + chroma_extent;\n cavg.yz = chroma_center;\n#endif\n#ifdef USE_CLIPPING\n texel1 = clip_aabb(cmin.xyz, cmax.xyz, clamp(cavg, cmin, cmax), texel1);\n#else\n texel1 = clamp(texel1, cmin, cmax);\n#endif\n#ifdef USE_YCOCG\n float lum0 = texel0.r;\n float lum1 = texel1.r;\n#else\n float lum0 = dot(texel0.rgb, w);\n float lum1 = dot(texel1.rgb, w);\n#endif\n float unbiased_diff = abs(lum0 - lum1) / max(lum0, max(lum1, 0.2));\n float unbiased_weight = 1.0 - unbiased_diff;\n float unbiased_weight_sqr = unbiased_weight * unbiased_weight;\n float k_feedback = mix(feedbackMin, feedbackMax, unbiased_weight_sqr);\n return mix(texel0, texel1, k_feedback);\n}\nvoid main()\n{\n vec2 uv = v_Texcoord;\n if (still) {\n gl_FragColor = mix(texture2D(currTex, uv), texture2D(prevTex, uv), 0.9);\n return;\n }\n#ifdef USE_DILATION\n vec3 c_frag = find_closest_fragment_3x3(uv);\n vec2 ss_vel = texture2D(velocityTex, c_frag.xy).xy;\n float vs_dist = depth_resolve_linear(c_frag.z);\n#else\n vec2 ss_vel = texture2D(velocityTex, uv).xy;\n float vs_dist = depth_sample_linear(uv);\n#endif\n vec4 color_temporal = temporal_reprojection(v_Texcoord, ss_vel, vs_dist);\n vec4 to_buffer = resolve_color(color_temporal);\n vec4 noise4 = PDsrand4(v_Texcoord + sinTime + 0.6959174) / 510.0;\n gl_FragColor = clamp(to_buffer + noise4, vec4(0.0), vec4(1.0));\n}\n@end\n";
+var TAAGLSLCode = "@export car.taa\n#define SHADER_NAME TAA2\nuniform sampler2D prevTex;\nuniform sampler2D currTex;\nuniform sampler2D velocityTex;\nuniform vec2 texelSize;\nuniform vec2 velocityTexelSize;\nuniform vec2 jitterOffset;\nuniform float hysteresis = 0.9;\nuniform bool still;\nvarying vec2 v_Texcoord;\nvec4 slideTowardsAABB(in vec4 oldColor, in vec4 newColor, in vec4 minimum, in vec4 maximum, in float maxVel) {\n if (all(greaterThanEqual(oldColor, minimum)) && all(lessThanEqual(oldColor, maximum))) {\n return oldColor;\n }\n else {\n float ghost = 0.4; return mix(newColor, oldColor, ghost);\n }\n}\nvoid main () {\n if (still) {\n gl_FragColor = mix(texture2D(currTex, v_Texcoord), texture2D(prevTex, v_Texcoord), 0.9);\n return;\n }\n float sharpen = 0.01 * pow(hysteresis, 3.0);\n vec4 source = texture2D(currTex, v_Texcoord);\n vec4 motionTexel = texture2D(velocityTex, v_Texcoord - jitterOffset);\n vec2 motion = motionTexel.rg - 0.5;\n if (length(motion) > 0.5 || motionTexel.a < 0.1) {\n gl_FragColor = source;\n return;\n }\n vec4 localMin = source, localMax = source;\n float maxVel = dot(motion, motion);\n for (int y = -1; y <= +1; ++y) {\n for (int x = -1; x <= +1; ++x) {\n vec2 off = vec2(float(x), float(y));\n vec4 c = texture2D(currTex, v_Texcoord + off * texelSize);\n localMin = min(localMin, c);\n localMax = max(localMax, c);\n vec4 mTexel = texture2D(velocityTex, v_Texcoord + off * velocityTexelSize);\n vec2 m = mTexel.xy - 0.5;\n if (length(m) > 0.5 || mTexel.a < 0.1) {\n continue;\n }\n maxVel = max(dot(m, m), maxVel);\n }\n }\n vec4 history = texture2D(prevTex, v_Texcoord - motion);\n if (sharpen > 0.0) {\n history =\n history * (1.0 + sharpen) -\n (texture2D(prevTex, v_Texcoord + texelSize) +\n texture2D(prevTex, v_Texcoord + vec2(-1.0,1.0) * texelSize) +\n texture2D(prevTex, v_Texcoord + vec2(1.0,-1.0) * texelSize) +\n texture2D(prevTex, v_Texcoord + -texelSize)) * (sharpen * 0.25);\n }\n history = slideTowardsAABB(history, source, localMin, localMax, maxVel);\n gl_FragColor = mix(source, history, hysteresis * clamp(1.0 - length(motion) * 0.2, 0.85, 1.0));\n}\n@end";
 
 // Temporal Super Sample for static Scene
 var Pass$2 = claygl.compositor.Pass;
@@ -1618,8 +1635,9 @@ function TemporalSuperSampling (opt) {
     var taaPass = this._taaPass = new Pass$2({
         fragment: claygl.Shader.source('car.taa')
     });
-    taaPass.setUniform('velocityTex', opt.velocityTexture);
-    taaPass.setUniform('depthTex', opt.depthTexture);
+    // taaPass.setUniform('depthTex', opt.depthTexture);
+
+    this._velocityTex = opt.velocityTexture;
 
     this._depthTex = opt.depthTexture;
 
@@ -1651,21 +1669,33 @@ TemporalSuperSampling.prototype = {
      * @parma {clay.Renderer} renderer
      * @param {clay.Camera} camera
      */
-    jitterProjection: function (renderer, camera$$1) {
+    jitterProjection: function (renderer, camera) {
+        var offset = this._haltonSequence[this._frame % this._haltonSequence.length];
         var viewport = renderer.viewport;
         var dpr = viewport.devicePixelRatio || renderer.getDevicePixelRatio();
         var width = viewport.width * dpr;
         var height = viewport.height * dpr;
 
-        var offset = this._haltonSequence[this._frame % this._haltonSequence.length];
-
         var translationMat = new claygl.Matrix4();
         translationMat.array[12] = (offset[0] * 2.0 - 1.0) / width;
         translationMat.array[13] = (offset[1] * 2.0 - 1.0) / height;
 
-        claygl.Matrix4.mul(camera$$1.projectionMatrix, translationMat, camera$$1.projectionMatrix);
+        claygl.Matrix4.mul(camera.projectionMatrix, translationMat, camera.projectionMatrix);
 
-        claygl.Matrix4.invert(camera$$1.invProjectionMatrix, camera$$1.projectionMatrix);
+        claygl.Matrix4.invert(camera.invProjectionMatrix, camera.projectionMatrix);
+    },
+
+    getJitterOffset: function (renderer) {
+        var offset = this._haltonSequence[this._frame % this._haltonSequence.length];
+        var viewport = renderer.viewport;
+        var dpr = viewport.devicePixelRatio || renderer.getDevicePixelRatio();
+        var width = viewport.width * dpr;
+        var height = viewport.height * dpr;
+
+        return [
+            offset[0] / width,
+            offset[1] / height
+        ];
     },
 
     /**
@@ -1711,7 +1741,7 @@ TemporalSuperSampling.prototype = {
         return this._frame >= this._haltonSequence.length;
     },
 
-    render: function (renderer, camera$$1, still) {
+    render: function (renderer, camera, still) {
         var taaPass = this._taaPass;
         // if (this._frame === 0) {
         //     // Direct output
@@ -1722,12 +1752,14 @@ TemporalSuperSampling.prototype = {
         // taaPass.setUniform('weight1', 0.9);
         // taaPass.setUniform('weight2', 0.1);
         // }
+        taaPass.setUniform('jitterOffset', this.getJitterOffset(renderer));
+        taaPass.setUniform('velocityTex', this._velocityTex);
         taaPass.setUniform('prevTex', this._prevFrameTex);
         taaPass.setUniform('currTex', this._sourceTex);
-        taaPass.setUniform('texelSize', [1 / this._sourceTex.width, 1 / this._sourceTex.width]);
-        taaPass.setUniform('depthTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.width]);
-        taaPass.setUniform('sinTime', Math.sin(+(new Date()) / 8));
-        taaPass.setUniform('projection', camera$$1.projectionMatrix.array);
+        taaPass.setUniform('texelSize', [1 / this._sourceTex.width, 1 / this._sourceTex.height]);
+        taaPass.setUniform('velocityTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.height]);
+        // taaPass.setUniform('sinTime', Math.sin(+(new Date()) / 8));
+        // taaPass.setUniform('projection', camera.projectionMatrix.array);
 
         taaPass.setUniform('still', !!still);
 
@@ -1759,7 +1791,6 @@ TemporalSuperSampling.prototype = {
 };
 
 var ShadowMapPass = claygl.prePass.ShadowMap;
-var PerspectiveCamera = claygl.camera.Perspective;
 
 function RenderMain(renderer, scene, enableShadow) {
 
@@ -1783,9 +1814,9 @@ function RenderMain(renderer, scene, enableShadow) {
 
     this._enableTemporalSS = 'auto';
 
-    scene.on('beforerender', function (renderer, scene, camera$$1) {
+    scene.on('beforerender', function (renderer, scene, camera) {
         if (this.needsTemporalSS()) {
-            this._temporalSS.jitterProjection(renderer, camera$$1);
+            this._temporalSS.jitterProjection(renderer, camera);
         }
     }, this);
 }
@@ -1815,20 +1846,22 @@ RenderMain.prototype.castRay = function (x, y, out) {
  */
 RenderMain.prototype.prepareRender = function () {
     var scene = this.scene;
-    var camera$$1 = scene.getMainCamera();
+    var camera = scene.getMainCamera();
     var renderer = this.renderer;
 
-    camera$$1.aspect = renderer.getViewportAspect();
+    camera.aspect = renderer.getViewportAspect();
 
     scene.update();
     scene.updateLights();
-    var renderList = scene.updateRenderList(camera$$1);
+    var renderList = scene.updateRenderList(camera);
 
     this._updateSRGBOfList(renderList.opaque);
     this._updateSRGBOfList(renderList.transparent);
 
     this._frame = 0;
-    // this._temporalSS.resetFrame();
+    if (!this._temporalSupportDynamic) {
+        this._temporalSS.resetFrame();
+    }
 
     var lights = scene.getLights();
     for (var i = 0; i < lights.length; i++) {
@@ -1850,13 +1883,13 @@ RenderMain.prototype.prepareRender = function () {
 
 RenderMain.prototype.render = function (accumulating) {
     var scene = this.scene;
-    var camera$$1 = scene.getMainCamera();
-    this._doRender(scene, camera$$1, accumulating, this._frame);
+    var camera = scene.getMainCamera();
+    this._doRender(scene, camera, accumulating, this._frame);
     this._frame++;
 };
 
 RenderMain.prototype.needsAccumulate = function () {
-    return this.needsTemporalSS() || this._needsSortProgressively;
+    return this.needsTemporalSS();
 };
 
 RenderMain.prototype.needsTemporalSS = function () {
@@ -1879,7 +1912,7 @@ RenderMain.prototype.isAccumulateFinished = function () {
         && !(this._compositor && frame < 30);
 };
 
-RenderMain.prototype._doRender = function (scene, camera$$1, accumulating, accumFrame) {
+RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFrame) {
 
     var renderer = this.renderer;
 
@@ -1888,10 +1921,10 @@ RenderMain.prototype._doRender = function (scene, camera$$1, accumulating, accum
     if (!accumulating && this._shadowMapPass) {
         this._shadowMapPass.kernelPCF = this._pcfKernels[0];
         // Not render shadowmap pass in accumulating frame.
-        this._shadowMapPass.render(renderer, scene, camera$$1, true);
+        this._shadowMapPass.render(renderer, scene, camera, true);
     }
 
-    this._updateShadowPCFKernel(scene, camera$$1, accumFrame);
+    this._updateShadowPCFKernel(scene, camera, accumFrame);
 
     // Shadowmap will set clearColor.
     renderer.gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -1899,14 +1932,14 @@ RenderMain.prototype._doRender = function (scene, camera$$1, accumulating, accum
     if (this._enablePostEffect) {
         // normal render also needs to be jittered when have edge pass.
         if (this.needsTemporalSS()) {
-            this._temporalSS.jitterProjection(renderer, camera$$1);
+            this._temporalSS.jitterProjection(renderer, camera);
         }
-        this._compositor.updateGBuffer(renderer, scene, camera$$1, this._temporalSS.getFrame());
+        this._compositor.updateGBuffer(renderer, scene, camera, this._temporalSS.getFrame());
     }
 
     // Always update SSAO to make sure have correct ssaoMap status
     // TODO TRANSPARENT OBJECTS.
-    this._updateSSAO(renderer, scene, camera$$1, this._temporalSS.getFrame());
+    this._updateSSAO(renderer, scene, camera, this._temporalSS.getFrame());
 
     var frameBuffer;
     if (this._enablePostEffect) {
@@ -1915,37 +1948,37 @@ RenderMain.prototype._doRender = function (scene, camera$$1, accumulating, accum
         frameBuffer.bind(renderer);
         renderer.gl.clear(renderer.gl.DEPTH_BUFFER_BIT | renderer.gl.COLOR_BUFFER_BIT);
         // FIXME Enable pre z will make alpha test failed
-        renderer.render(scene, camera$$1, true, this.preZ);
-        this.afterRenderScene(renderer, scene, camera$$1);
+        renderer.render(scene, camera, true, this.preZ);
+        this.afterRenderScene(renderer, scene, camera);
         frameBuffer.unbind(renderer);
 
-        if (this.needsTemporalSS()) {
-            this._compositor.composite(renderer, scene, camera$$1, this._temporalSS.getSourceFrameBuffer(), this._temporalSS.getFrame());
-            this._temporalSS.render(renderer, camera$$1, accumulating);
+        if (this.needsTemporalSS() && (this._temporalSupportDynamic || accumulating)) {
+            this._compositor.composite(renderer, scene, camera, this._temporalSS.getSourceFrameBuffer(), this._temporalSS.getFrame());
+            this._temporalSS.render(renderer, camera, accumulating);
         }
         else {
-            this._compositor.composite(renderer, scene, camera$$1, null, 0);
+            this._compositor.composite(renderer, scene, camera, null, 0);
         }
     }
     else {
-        if (this.needsTemporalSS()) {
+        if (this.needsTemporalSS() && (this._temporalSupportDynamic || accumulating)) {
             frameBuffer = this._temporalSS.getSourceFrameBuffer();
             frameBuffer.bind(renderer);
             renderer.saveClear();
             renderer.clearBit = renderer.gl.DEPTH_BUFFER_BIT | renderer.gl.COLOR_BUFFER_BIT;
-            renderer.render(scene, camera$$1, true, this.preZ);
-            this.afterRenderScene(renderer, scene, camera$$1);
+            renderer.render(scene, camera, true, this.preZ);
+            this.afterRenderScene(renderer, scene, camera);
             renderer.restoreClear();
             frameBuffer.unbind(renderer);
-            this._temporalSS.render(renderer, camera$$1, accumulating);
+            this._temporalSS.render(renderer, camera, accumulating);
         }
         else {
-            renderer.render(scene, camera$$1, true, this.preZ);
-            this.afterRenderScene(renderer, scene, camera$$1);
+            renderer.render(scene, camera, true, this.preZ);
+            this.afterRenderScene(renderer, scene, camera);
         }
     }
 
-    this.afterRenderAll(renderer, scene, camera$$1);
+    this.afterRenderAll(renderer, scene, camera);
 };
 
 RenderMain.prototype._updateSRGBOfList = function (list) {
@@ -1955,14 +1988,14 @@ RenderMain.prototype._updateSRGBOfList = function (list) {
     }
 };
 
-RenderMain.prototype.afterRenderScene = function (renderer, scene, camera$$1) {};
-RenderMain.prototype.afterRenderAll = function (renderer, scene, camera$$1) {};
+RenderMain.prototype.afterRenderScene = function (renderer, scene, camera) {};
+RenderMain.prototype.afterRenderAll = function (renderer, scene, camera) {};
 
-RenderMain.prototype._updateSSAO = function (renderer, scene, camera$$1, frame) {
+RenderMain.prototype._updateSSAO = function (renderer, scene, camera, frame) {
     var ifEnableSSAO = this._enableSSAO && this._enablePostEffect;
     var compositor$$1 = this._compositor;
     if (ifEnableSSAO) {
-        this._compositor.updateSSAO(renderer, scene, camera$$1, this._temporalSS.getFrame());
+        this._compositor.updateSSAO(renderer, scene, camera, this._temporalSS.getFrame());
     }
 
     function updateQueue(queue) {
@@ -1974,11 +2007,11 @@ RenderMain.prototype._updateSSAO = function (renderer, scene, camera$$1, frame) 
             }
         }
     }
-    updateQueue(scene.getRenderList(camera$$1).opaque);
-    updateQueue(scene.getRenderList(camera$$1).transparent);
+    updateQueue(scene.getRenderList(camera).opaque);
+    updateQueue(scene.getRenderList(camera).transparent);
 };
 
-RenderMain.prototype._updateShadowPCFKernel = function (scene, camera$$1, frame) {
+RenderMain.prototype._updateShadowPCFKernel = function (scene, camera, frame) {
     var pcfKernel = this._pcfKernels[frame % this._pcfKernels.length];
     function updateQueue(queue) {
         for (var i = 0; i < queue.length; i++) {
@@ -1990,8 +2023,8 @@ RenderMain.prototype._updateShadowPCFKernel = function (scene, camera$$1, frame)
             }
         }
     }
-    updateQueue(scene.getRenderList(camera$$1).opaque);
-    updateQueue(scene.getRenderList(camera$$1).transparent);
+    updateQueue(scene.getRenderList(camera).opaque);
+    updateQueue(scene.getRenderList(camera).transparent);
 };
 
 RenderMain.prototype.dispose = function () {
@@ -2032,7 +2065,7 @@ RenderMain.prototype.setPostEffect = function (opts, api) {
     compositor$$1.setColorLookupTexture(colorCorrOpts.lookupTexture, api);
     compositor$$1.setExposure(colorCorrOpts.exposure);
 
-    ['radius', 'quality', 'intensity'].forEach(function (name) {
+    ['radius', 'quality', 'intensity', 'temporalFilter'].forEach(function (name) {
         compositor$$1.setSSAOParameter(name, ssaoOpts[name]);
     });
     ['quality', 'maxRoughness', 'physical'].forEach(function (name) {
@@ -2080,6 +2113,7 @@ RenderMain.prototype.setDOFFocusOnPoint = function (depth) {
 RenderMain.prototype.setTemporalSuperSampling = function (temporalSuperSamplingOpt) {
     temporalSuperSamplingOpt = temporalSuperSamplingOpt || {};
     this._enableTemporalSS = temporalSuperSamplingOpt.enable;
+    this._temporalSupportDynamic = temporalSuperSamplingOpt.dynamic;
 };
 
 RenderMain.prototype.isLinearSpace = function () {
@@ -2092,6 +2126,12 @@ var defaultGraphicConfig = {
         enable: true,
         kernelSize: 6,
         blurSize: 2
+    },
+
+    temporalSuperSampling: {
+        // If support dynamic scene
+        dynamic: true,
+        enable: 'auto'
     },
 
     // Configuration about post effects.
@@ -2130,7 +2170,8 @@ var defaultGraphicConfig = {
             // Quality of SSAO. 'low'|'medium'|'high'|'ultra'
             quality: 'medium',
             // Intensity of SSAO
-            intensity: 1
+            intensity: 1,
+            temporalFilter: false
         },
         // Configuration about screen space reflection
         screenSpaceReflection: {
@@ -2552,6 +2593,7 @@ function ClayAdvancedRenderer(renderer, scene, timeline, graphicOpts) {
 
     this._renderMain.setShadow(graphicOpts.shadow);
     this._renderMain.setPostEffect(graphicOpts.postEffect);
+    this._renderMain.setTemporalSuperSampling(graphicOpts.temporalSuperSampling);
 
     this._needsRefresh = false;
 

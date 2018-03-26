@@ -4,7 +4,7 @@ uniform sampler2D prevTex;
 uniform sampler2D currTex;
 uniform sampler2D velocityTex;
 
-uniform float weight = 0.2;
+uniform float weight = 0.1;
 
 varying vec2 v_Texcoord;
 

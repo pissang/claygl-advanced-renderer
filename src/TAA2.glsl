@@ -8,13 +8,16 @@ uniform sampler2D prevTex;
 uniform sampler2D currTex;
 uniform sampler2D velocityTex;
 
-
 uniform vec2 texelSize;
 uniform vec2 velocityTexelSize;
+
+uniform vec2 jitterOffset;
 
 // Between 0 to 1
 // http://casual-effects.com/g3d/G3D10/build/manual/class_g3_d_1_1_temporal_filter_1_1_settings.html#aa3f2ea1bc948d770437aedfd1e921c32
 uniform float hysteresis = 0.9;
+
+uniform bool still;
 
 varying vec2 v_Texcoord;
 
@@ -35,11 +38,15 @@ vec4 slideTowardsAABB(in vec4 oldColor, in vec4 newColor, in vec4 minimum, in ve
 
 void main () {
 
+    if (still) {
+        gl_FragColor = mix(texture2D(currTex, v_Texcoord), texture2D(prevTex, v_Texcoord), 0.9);
+        return;
+    }
     float sharpen = 0.01 * pow(hysteresis, 3.0);
 
     // Compute source neighborhood statistics
     vec4 source = texture2D(currTex, v_Texcoord);
-    vec4 motionTexel = texture2D(velocityTex, v_Texcoord);
+    vec4 motionTexel = texture2D(velocityTex, v_Texcoord - jitterOffset);
     vec2 motion = motionTexel.rg - 0.5;
     // Remove pixels moved too far.
     if (length(motion) > 0.5 || motionTexel.a < 0.1) {

@@ -26,7 +26,7 @@ uniform float feedbackMax: 0.97;
 uniform mat4 projection;
 
 uniform vec2 texelSize;
-uniform vec2 depthTexelSize;
+uniform vec2 velocityTexelSize;
 
 varying vec2 v_Texcoord;
 
@@ -47,7 +47,7 @@ float depth_resolve_linear(float depth) {
 
 vec3 find_closest_fragment_3x3(vec2 uv)
 {
-	vec2 dd = abs(depthTexelSize.xy);
+	vec2 dd = abs(velocityTexelSize.xy);
 	vec2 du = vec2(dd.x, 0.0);
 	vec2 dv = vec2(0.0, dd.y);
 
@@ -283,7 +283,7 @@ vec4 temporal_reprojection(vec2 ss_txc, vec2 ss_vel, float vs_dist)
     const float _GatherBase = 0.5;
     const float _GatherSubpixelMotion = 0.1666;
 
-    vec2 texel_vel = ss_vel / depthTexelSize.xy;
+    vec2 texel_vel = ss_vel / velocityTexelSize.xy;
     float texel_vel_mag = length(texel_vel) * vs_dist;
     float k_subpixel_motion = clamp(_SubpixelThreshold / (FLT_EPS + texel_vel_mag), 0.0, 1.0);
     float k_min_max_support = _GatherBase + _GatherSubpixelMotion * k_subpixel_motion;

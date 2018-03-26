@@ -69,12 +69,11 @@ TemporalSuperSampling.prototype = {
      * @param {clay.Camera} camera
      */
     jitterProjection: function (renderer, camera) {
+        var offset = this._haltonSequence[this._frame % this._haltonSequence.length];
         var viewport = renderer.viewport;
         var dpr = viewport.devicePixelRatio || renderer.getDevicePixelRatio();
         var width = viewport.width * dpr;
         var height = viewport.height * dpr;
-
-        var offset = this._haltonSequence[this._frame % this._haltonSequence.length];
 
         var translationMat = new Matrix4();
         translationMat.array[12] = (offset[0] * 2.0 - 1.0) / width;
@@ -83,6 +82,19 @@ TemporalSuperSampling.prototype = {
         Matrix4.mul(camera.projectionMatrix, translationMat, camera.projectionMatrix);
 
         Matrix4.invert(camera.invProjectionMatrix, camera.projectionMatrix);
+    },
+
+    getJitterOffset: function (renderer) {
+        var offset = this._haltonSequence[this._frame % this._haltonSequence.length];
+        var viewport = renderer.viewport;
+        var dpr = viewport.devicePixelRatio || renderer.getDevicePixelRatio();
+        var width = viewport.width * dpr;
+        var height = viewport.height * dpr;
+
+        return [
+            offset[0] / width,
+            offset[1] / height
+        ];
     },
 
     /**
@@ -139,6 +151,7 @@ TemporalSuperSampling.prototype = {
         // taaPass.setUniform('weight1', 0.9);
         // taaPass.setUniform('weight2', 0.1);
         // }
+        taaPass.setUniform('jitterOffset', this.getJitterOffset(renderer));
         taaPass.setUniform('velocityTex', this._velocityTex);
         taaPass.setUniform('prevTex', this._prevFrameTex);
         taaPass.setUniform('currTex', this._sourceTex);

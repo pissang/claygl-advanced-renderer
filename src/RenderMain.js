@@ -1,7 +1,6 @@
-import { prePass, camera, Vector2 } from 'claygl';
+import { prePass, Vector2 } from 'claygl';
 
 var ShadowMapPass = prePass.ShadowMap;
-var PerspectiveCamera = camera.Perspective;
 
 import EffectCompositor from './EffectCompositor';
 import TemporalSuperSampling from './TemporalSuperSampling';
@@ -74,7 +73,9 @@ RenderMain.prototype.prepareRender = function () {
     this._updateSRGBOfList(renderList.transparent);
 
     this._frame = 0;
-    // this._temporalSS.resetFrame();
+    if (!this._temporalSupportDynamic) {
+        this._temporalSS.resetFrame();
+    }
 
     var lights = scene.getLights();
     for (var i = 0; i < lights.length; i++) {
@@ -165,7 +166,7 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
         this.afterRenderScene(renderer, scene, camera);
         frameBuffer.unbind(renderer);
 
-        if (this.needsTemporalSS()) {
+        if (this.needsTemporalSS() && (this._temporalSupportDynamic || accumulating)) {
             this._compositor.composite(renderer, scene, camera, this._temporalSS.getSourceFrameBuffer(), this._temporalSS.getFrame());
             this._temporalSS.render(renderer, camera, accumulating);
         }
@@ -174,7 +175,7 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
         }
     }
     else {
-        if (this.needsTemporalSS()) {
+        if (this.needsTemporalSS() && (this._temporalSupportDynamic || accumulating)) {
             frameBuffer = this._temporalSS.getSourceFrameBuffer();
             frameBuffer.bind(renderer);
             renderer.saveClear();
@@ -278,7 +279,7 @@ RenderMain.prototype.setPostEffect = function (opts, api) {
     compositor.setColorLookupTexture(colorCorrOpts.lookupTexture, api);
     compositor.setExposure(colorCorrOpts.exposure);
 
-    ['radius', 'quality', 'intensity'].forEach(function (name) {
+    ['radius', 'quality', 'intensity', 'temporalFilter'].forEach(function (name) {
         compositor.setSSAOParameter(name, ssaoOpts[name]);
     });
     ['quality', 'maxRoughness', 'physical'].forEach(function (name) {
@@ -326,6 +327,7 @@ RenderMain.prototype.setDOFFocusOnPoint = function (depth) {
 RenderMain.prototype.setTemporalSuperSampling = function (temporalSuperSamplingOpt) {
     temporalSuperSamplingOpt = temporalSuperSamplingOpt || {};
     this._enableTemporalSS = temporalSuperSamplingOpt.enable;
+    this._temporalSupportDynamic = temporalSuperSamplingOpt.dynamic;
 };
 
 RenderMain.prototype.isLinearSpace = function () {

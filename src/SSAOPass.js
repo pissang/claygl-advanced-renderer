@@ -98,7 +98,7 @@ function SSAOPass(opt) {
     this._blurPass.material.setUniform('depthTex', this._depthTex);
 
 
-    this._temporalReprojection = false;
+    this._temporalFilter = true;
 
     this._frame = 0;
 }
@@ -126,7 +126,7 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
     this._frame++;
 
     ssaoPass.setUniform('kernel', this._kernels[
-        (this._temporalReprojection ? this._frame : frame) % this._kernels.length
+        this._temporalFilter ? (this._frame % this._kernels.length) : 0
     ]);
     ssaoPass.setUniform('depthTex', this._depthTex);
     if (this._normalTex != null) {
@@ -162,7 +162,7 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
     renderer.gl.clear(renderer.gl.COLOR_BUFFER_BIT);
     ssaoPass.render(renderer);
 
-    if (this._temporalReprojection) {
+    if (this._temporalFilter) {
         this._framebuffer.attach(currTexture);
         blendPass.setUniform('prevTex', prevTexture);
         blendPass.setUniform('currTex', ssaoTexture);
@@ -174,7 +174,7 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
     blurPass.setUniform('projection', camera.projectionMatrix.array);
     this._framebuffer.attach(blurTexture);
     blurPass.setUniform('direction', 0);
-    blurPass.setUniform('ssaoTexture', this._temporalReprojection ? currTexture : ssaoTexture);
+    blurPass.setUniform('ssaoTexture', this._temporalFilter ? currTexture : ssaoTexture);
     blurPass.render(renderer);
 
     this._framebuffer.attach(ssaoTexture);
@@ -207,6 +207,9 @@ SSAOPass.prototype.setParameter = function (name, val) {
     }
     else if (name === 'intensity') {
         this._ssaoPass.material.set('intensity', val);
+    }
+    else if (name === 'temporalFilter') {
+        this._temporalFilter = val;
     }
     else {
         this._ssaoPass.setUniform(name, val);

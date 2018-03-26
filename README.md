@@ -12,7 +12,14 @@ ClayGL advanced renderer provide a full render pipeline which includes:
 + Temporal Anti-Aliasing
 + Progressive Enhancement on SSAO, SSR, Shadow.
 
-### Basic Usage
+## Install from NPM
+
+```bash
+npm install claygl
+npm install claygl-advanced-renderer
+```
+
+## Basic Usage
 
 ```html
 <html>
@@ -33,6 +40,8 @@ ClayGL advanced renderer provide a full render pipeline which includes:
 
       init: function (app) {
         this._advancedRenderer = new ClayAdvancedRenderer(app.renderer, app.scene, app.timeline, {
+          // See full graphic configuration at
+          // https://github.com/pissang/claygl-advanced-renderer/blob/master/src/defaultGraphicConfig.js
           shadow: true
         });
 
