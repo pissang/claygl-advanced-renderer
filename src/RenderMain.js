@@ -328,6 +328,13 @@ RenderMain.prototype.setTemporalSuperSampling = function (temporalSuperSamplingO
     temporalSuperSamplingOpt = temporalSuperSamplingOpt || {};
     this._enableTemporalSS = temporalSuperSamplingOpt.enable;
     this._temporalSupportDynamic = temporalSuperSamplingOpt.dynamic;
+
+    if (this._enableTemporalSS && this._temporalSupportDynamic) {
+        this._compositor.enableVelocityBuffer();
+    }
+    else {
+        this._compositor.disableVelocityBuffer();
+    }
 };
 
 RenderMain.prototype.isLinearSpace = function () {

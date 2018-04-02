@@ -5,7 +5,7 @@ var Pass = compositor.Pass;
 
 import halton from './halton';
 
-import TAAGLSLCode from './TAA2.glsl.js';
+import TAAGLSLCode from './TAA3.glsl.js';
 
 Shader.import(TAAGLSLCode);
 

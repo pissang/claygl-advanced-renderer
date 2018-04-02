@@ -43,6 +43,8 @@ function EffectCompositor() {
     this._framebuffer.attach(this._sourceTexture);
     this._framebuffer.attach(this._depthTexture, FrameBuffer.DEPTH_ATTACHMENT);
 
+    this._velocityTex1 =
+
     this._gBufferPass = new GBuffer({
         renderTransparent: true,
         enableTargetTexture3: false,
@@ -181,6 +183,13 @@ EffectCompositor.prototype.enableSSAO = function () {
  */
 EffectCompositor.prototype.disableSSAO = function () {
     this._enableSSAO = false;
+};
+
+EffectCompositor.prototype.enableVelocityBuffer = function () {
+    this._gBufferPass.enableTargetTexture4 = true;
+};
+EffectCompositor.prototype.disableVelocityBuffer = function () {
+    this._gBufferPass.enableTargetTexture4 = false;
 };
 
 /**
