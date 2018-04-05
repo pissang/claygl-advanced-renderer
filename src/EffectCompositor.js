@@ -43,8 +43,6 @@ function EffectCompositor() {
     this._framebuffer.attach(this._sourceTexture);
     this._framebuffer.attach(this._depthTexture, FrameBuffer.DEPTH_ATTACHMENT);
 
-    this._velocityTex1 =
-
     this._gBufferPass = new GBuffer({
         renderTransparent: true,
         enableTargetTexture3: false,
@@ -62,9 +60,10 @@ function EffectCompositor() {
     this._compositeNode = this._compositor.getNodeByName('composite');
     this._fxaaNode = this._compositor.getNodeByName('FXAA');
 
-    this._dofBlurNodes = ['dof_far_blur', 'dof_near_blur', 'dof_coc_blur'].map(function (name) {
+    this._dofBlurNodes = ['dof_blur'].map(function (name) {
         return this._compositor.getNodeByName(name);
     }, this);
+    this._dofCompositeNode = this._compositor.getNodeByName('dof_composite');
 
     this._dofBlurKernel = null;
     this._dofBlurKernelSize = new Float32Array(0);
@@ -353,17 +352,15 @@ EffectCompositor.prototype.setDOFParameter = function (name, value) {
     switch (name) {
         case 'focalDistance':
         case 'focalRange':
-        case 'fstop':
+        case 'aperture':
             this._cocNode.setParameter(name, value);
             break;
         case 'blurRadius':
-            for (var i = 0; i < this._dofBlurNodes.length; i++) {
-                this._dofBlurNodes[i].setParameter('blurRadius', value);
-            }
+            this._dofBlurRadius = value;
             break;
         case 'quality':
             var kernelSize = ({
-                low: 4, medium: 8, high: 16, ultra: 32
+                low: 4, medium: 8, high: 16, ultra: 43
             })[value] || 8;
             this._dofBlurKernelSize = kernelSize;
             for (var i = 0; i < this._dofBlurNodes.length; i++) {
@@ -475,10 +472,15 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, frameb
         blurKernel[i] = poissonKernel[i + kernelOffset * blurKernelSize * 2];
     }
 
+    var maxCoc = this._dofBlurRadius || 10;
+    maxCoc /= renderer.getHeight();
     for (var i = 0; i < this._dofBlurNodes.length; i++) {
         this._dofBlurNodes[i].setParameter('percent', frame / 30.0);
         this._dofBlurNodes[i].setParameter('poissonKernel', blurKernel);
+        this._dofBlurNodes[i].setParameter('maxCoc', maxCoc);
     }
+    this._cocNode.setParameter('maxCoc', maxCoc);
+    this._dofCompositeNode.setParameter('maxCoc', maxCoc);
 
     this._cocNode.setParameter('zNear', camera.near);
     this._cocNode.setParameter('zFar', camera.far);

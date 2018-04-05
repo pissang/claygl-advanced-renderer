@@ -33,7 +33,7 @@ export default {
             // Max out of focus blur radius.
             blurRadius: 5,
             // fstop of camera. Smaller fstop will have shallow depth of field
-            fstop: 2.8,
+            aperture: 5.6,
             // Blur quality. 'low'|'medium'|'high'|'ultra'
             quality: 'medium'
         },

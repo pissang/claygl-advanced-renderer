@@ -285,7 +285,7 @@ RenderMain.prototype.setPostEffect = function (opts, api) {
     ['quality', 'maxRoughness', 'physical'].forEach(function (name) {
         compositor.setSSRParameter(name, ssrOpts[name]);
     });
-    ['quality', 'focalDistance', 'focalRange', 'blurRadius', 'fstop'].forEach(function (name) {
+    ['quality', 'focalDistance', 'focalRange', 'blurRadius', 'aperture'].forEach(function (name) {
         compositor.setDOFParameter(name, dofOpts[name]);
     });
     ['brightness', 'contrast', 'saturation'].forEach(function (name) {

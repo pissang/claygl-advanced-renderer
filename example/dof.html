@@ -11,6 +11,7 @@
     <style>
         body {
             margin: 0;
+            background: red;
         }
     </style>
 
@@ -26,6 +27,7 @@
             autoRender: false,
 
             init: function (app) {
+                app.renderer.clearColor = [0,0,0,1];
                 this._advancedRenderer = new ClayAdvancedRenderer(app.renderer, app.scene, app.timeline, {
                     shadow: true,
                     temporalSuperSampling: {
@@ -41,6 +43,12 @@
                             enable: true,
                             intensity: 1.5,
                             radius: 0.4
+                        },
+                        depthOfField: {
+                            enable: true,
+                            blurRadius: 10,
+                            aperture: 1,
+                            quality: 'ultra'
                         },
                         FXAA: {
                             enable: true
@@ -73,16 +81,28 @@
                 // app.loadModel('./asset/model/DamagedHelmet.glb').then(function (result) {
                 app.loadModel('./asset/model/shaderBall/shaderBall.gltf').then(function (result) {
                     result.rootNode.scale.set(0.01, 0.01, 0.01);
+                    for (var i = 0; i < 9; i++) {
+                        var siblings = app.cloneNode(result.rootNode);
+                        siblings.position.set((i - 4) * 3, 0, 0);
+
+                        var color = [Math.random(), Math.random(), Math.random()];
+                        siblings.traverse(function (mesh) {
+                            if (mesh.material && (mesh.material.name === 'lambert6' || mesh.material.name === 'lambert3' || mesh.material.name === 'lambert5')) {
+                                mesh.material.set('color', color);
+                            }
+                        });
+                    }
+                    result.rootNode.position.z = -3;
                     self._advancedRenderer.render();
                 });
 
                 app.createAmbientCubemapLight('./asset/hdr/pisa.hdr', 1, 0.8, 2).then(function (result) {
-                    var skybox = new clay.plugin.Skybox({
-                        scene: app.scene
-                    });
-                    skybox.setEnvironmentMap(result.specular);
-                    skybox.material.set('lod', 4);
-                    skybox.material.define('fragment', 'RGBM_DECODE');
+                    // var skybox = new clay.plugin.Skybox({
+                    //     scene: app.scene
+                    // });
+                    // skybox.setEnvironmentMap(result.specular);
+                    // skybox.material.set('lod', 4);
+                    // skybox.material.define('fragment', 'RGBM_DECODE');
                     self._advancedRenderer.render();
                 });
             },

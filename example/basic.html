@@ -23,8 +23,9 @@
                     shadow: true,
                     postEffect: {
                         screenSpaceAmbientOcclusion: {
+                            temporalFilter: true,
                             enable: true,
-                            intensity: 1,
+                            intensity: 1.5,
                             radius: 0.4
                         }
                     }
@@ -63,9 +64,9 @@
                     timeline: app.timeline
                 });
 
-                // this._control.on('update', function () {
-                //     this._advancedRenderer.render();
-                // }, this);
+                this._control.on('update', function () {
+                    this._advancedRenderer.render();
+                }, this);
 
                 app.createAmbientCubemapLight('./asset/hdr/pisa.hdr', 2, 0.4);
             },

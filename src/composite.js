@@ -447,22 +447,19 @@ export default {
                         'minFilter': 'NEAREST',
                         'magFilter': 'NEAREST',
                         'width': 'expr(width * 1.0)',
-                        'height': 'expr(height * 1.0)'
+                        'height': 'expr(height * 1.0)',
+                        'type': 'HALF_FLOAT'
                     }
                 }
-            },
-            'parameters': {
-                'focalDist': 50,
-                'focalRange': 30
             }
         },
 
         {
-            'name': 'dof_far_blur',
+            'name': 'dof_blur',
             'shader': '#source(car.dof.diskBlur)',
             'inputs': {
-                'texture': 'source',
-                'coc': 'coc'
+                'mainTex': 'source',
+                'cocTex': 'coc'
             },
             'outputs': {
                 'color': {
@@ -475,54 +472,6 @@ export default {
             },
             'parameters': {
                 'textureSize': 'expr( [width * 1.0, height * 1.0] )'
-            }
-        },
-        {
-            'name': 'dof_near_blur',
-            'shader': '#source(car.dof.diskBlur)',
-            'inputs': {
-                'texture': 'source',
-                'coc': 'coc'
-            },
-            'outputs': {
-                'color': {
-                    'parameters': {
-                        'width': 'expr(width * 1.0)',
-                        'height': 'expr(height * 1.0)',
-                        'type': 'HALF_FLOAT'
-                    }
-                }
-            },
-            'parameters': {
-                'textureSize': 'expr( [width * 1.0, height * 1.0] )'
-            },
-            'defines': {
-                'BLUR_NEARFIELD': null
-            }
-        },
-
-
-        {
-            'name': 'dof_coc_blur',
-            'shader': '#source(car.dof.diskBlur)',
-            'inputs': {
-                'texture': 'coc'
-            },
-            'outputs': {
-                'color': {
-                    'parameters': {
-                        'minFilter': 'NEAREST',
-                        'magFilter': 'NEAREST',
-                        'width': 'expr(width * 1.0)',
-                        'height': 'expr(height * 1.0)'
-                    }
-                }
-            },
-            'parameters': {
-                'textureSize': 'expr( [width * 1.0, height * 1.0] )'
-            },
-            'defines': {
-                'BLUR_COC': null
             }
         },
 
@@ -530,11 +479,9 @@ export default {
             'name': 'dof_composite',
             'shader': '#source(car.dof.composite)',
             'inputs': {
-                'original': 'source',
-                'blurred': 'dof_far_blur',
-                'nearfield': 'dof_near_blur',
-                'coc': 'coc',
-                'nearcoc': 'dof_coc_blur'
+                'sharp': 'source',
+                'blur': 'dof_blur',
+                'cocTex': 'coc'
             },
             'outputs': {
                 'color': {
@@ -544,6 +491,9 @@ export default {
                         'type': 'HALF_FLOAT'
                     }
                 }
+            },
+            'defines': {
+                // DEBUG: 4
             }
         },
         {

@@ -2,16 +2,20 @@
 
 uniform sampler2D depth;
 
-uniform float zNear: 0.1;
-uniform float zFar: 2000;
+uniform float zNear = 0.1;
+uniform float zFar = 2000;
 
-uniform float focalDistance: 3;
-// Object in range are perfectly in focus
-uniform float focalRange: 1;
-// 30mm
-uniform float focalLength: 30;
-// f/2.8
-uniform float fstop: 2.8;
+uniform float focalDistance = 10;
+// 50mm
+uniform float focalLength = 50;
+// f/5.6
+uniform float aperture = 5.6;
+
+uniform float maxCoc;
+
+// Height of the 35mm full-frame format (36mm x 24mm)
+// TODO: Should be set by a physical camera
+uniform float _filmHeight = 0.024;
 
 varying vec2 v_Texcoord;
 
@@ -23,36 +27,15 @@ void main()
 
     float dist = 2.0 * zNear * zFar / (zFar + zNear - z * (zFar - zNear));
 
-    float aperture = focalLength / fstop;
+    // From https://github.com/Unity-Technologies/PostProcessing
+    float f = focalLength / 1000.0;
+    float s1 = max(f, focalDistance);
+    float coeff = f * f / (aperture * (s1 - f) * _filmHeight * 2.0);
 
-    float coc;
+    float coc = (dist - focalDistance) * coeff / max(dist, 1e-5);
+    coc /= maxCoc;
 
-    float uppper = focalDistance + focalRange;
-    float lower = focalDistance - focalRange;
-    if (dist <= uppper && dist >= lower) {
-        // Object in range are perfectly in focus
-        coc = 0.5;
-    }
-    else {
-        // Adjust focalDistance
-        float focalAdjusted = dist > uppper ? uppper : lower;
-
-        // GPU Gems Depth of Field: A Survey of Techniques
-        coc = abs(aperture * (focalLength * (dist - focalAdjusted)) / (dist * (focalAdjusted - focalLength)));
-        // Clamp on the near focus plane and far focus plane
-        // PENDING
-        // Float value can only be [0.0 - 1.0)
-        coc = clamp(coc, 0.0, 2.0) / 2.00001;
-
-        // Near field
-        if (dist < lower) {
-            coc = -coc;
-        }
-        coc = coc * 0.5 + 0.5;
-    }
-
-    // R: coc, < 0.5 is near field, > 0.5 is far field
-    gl_FragColor = encodeFloat(coc);
+    gl_FragColor = vec4(clamp(coc * 0.5 + 0.5, 0.0, 1.0), 0.0, 0.0, 1.0);
 }
 @end
 
@@ -61,11 +44,13 @@ void main()
 
 #define DEBUG 0
 
-uniform sampler2D original;
-uniform sampler2D blurred;
-uniform sampler2D nearfield;
-uniform sampler2D coc;
-uniform sampler2D nearcoc;
+uniform sampler2D sharp;
+uniform sampler2D blur;
+uniform sampler2D cocTex;
+uniform float maxCoc;
+
+uniform vec2 textureSize;
+
 varying vec2 v_Texcoord;
 
 @import clay.util.rgbm
@@ -73,47 +58,25 @@ varying vec2 v_Texcoord;
 
 void main()
 {
-    vec4 blurredColor = decodeHDR(texture2D(blurred, v_Texcoord));
-    vec4 originalColor = decodeHDR(texture2D(original, v_Texcoord));
+    vec2 texelSize = 1.0 / textureSize;
+    float coc = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
+    vec4 blurTexel = decodeHDR(texture2D(blur, v_Texcoord));
+    vec4 sharpTexel = decodeHDR(texture2D(sharp, v_Texcoord));
 
-    float fCoc = decodeFloat(texture2D(coc, v_Texcoord));
+    // float tmp = floor(blurTexel.a * 65535.0);
+    // float alpha = floor(tmp / 256.0);
+    // float nfa = (tmp - alpha * 256.0) / 255.0;
+    // blurTexel.a = alpha / 255.0;
+    float nfa = blurTexel.a;
+    blurTexel.a = 1.0;
 
-    // FIXME blur after premultiply will have white edge
-    // blurredColor.rgb /= max(fCoc, 0.1);
-    fCoc = abs(fCoc * 2.0 - 1.0);
+    // Convert CoC to far field alpha value.
+    float ffa = smoothstep(0.0, 0.2, coc);
+    // TODO
+    gl_FragColor = mix(mix(sharpTexel, blurTexel, ffa), blurTexel, nfa);
 
-    float weight = smoothstep(0.0, 1.0, fCoc);
-    // float weight = fCoc;
-
-#ifdef NEARFIELD_ENABLED
-    vec4 nearfieldColor = decodeHDR(texture2D(nearfield, v_Texcoord));
-    float fNearCoc = decodeFloat(texture2D(nearcoc, v_Texcoord));
-    fNearCoc = abs(fNearCoc * 2.0 - 1.0);
-
-    // FIXME
-    gl_FragColor = encodeHDR(
-        mix(
-            nearfieldColor, mix(originalColor, blurredColor, weight),
-            // near field blur is too unobvious if use linear blending
-            pow(1.0 - fNearCoc, 4.0)
-        )
-    );
-#else
-    gl_FragColor = encodeHDR(mix(originalColor, blurredColor, weight));
-#endif
-
-// #if DEBUG == 1
-//     // Show coc
-//     gl_FragColor = vec4(vec3(fCoc), 1.0);
-// #elif DEBUG == 2
-//     // Show near coc
-//     gl_FragColor = vec4(vec3(fNearCoc), 1.0);
-// #elif DEBUG == 3
-//     gl_FragColor = encodeHDR(blurredColor);
-// #elif DEBUG == 4
-//     // gl_FragColor = vec4(vec3(nearfieldTexel.a), 1.0);
-//     gl_FragColor = encodeHDR(nearfieldColor);
-// #endif
+    // gl_FragColor = vec4(vec3(abs(coc)), 1.0);
+    // gl_FragColor = vec4(blurTexel.rgb, 1.0);
 }
 
 @end
@@ -124,16 +87,17 @@ void main()
 
 #define POISSON_KERNEL_SIZE 16;
 
-uniform sampler2D texture;
-uniform sampler2D coc;
-varying vec2 v_Texcoord;
+uniform sampler2D mainTex;
+uniform sampler2D cocTex;
 
-uniform float blurRadius : 10.0;
-uniform vec2 textureSize : [512.0, 512.0];
+uniform float maxCoc;
+uniform vec2 textureSize;
 
 uniform vec2 poissonKernel[POISSON_KERNEL_SIZE];
 
 uniform float percent;
+
+varying vec2 v_Texcoord;
 
 float nrand(const in vec2 n) {
     return fract(sin(dot(n.xy ,vec2(12.9898,78.233))) * 43758.5453);
@@ -145,60 +109,65 @@ float nrand(const in vec2 n) {
 
 void main()
 {
-    vec2 offset = blurRadius / textureSize;
+    vec2 texelSize = 1.0 / textureSize;
+    vec2 offset = vec2(maxCoc * textureSize.x / textureSize.y, maxCoc);
 
-    float rnd = 6.28318 * nrand(v_Texcoord + 0.07 * percent );
+    float rnd = 6.28318 * nrand(v_Texcoord + 0.07 * percent);
     float cosa = cos(rnd);
     float sina = sin(rnd);
     vec4 basis = vec4(cosa, -sina, sina, cosa);
 
-#if !defined(BLUR_NEARFIELD) && !defined(BLUR_COC)
-    offset *= abs(decodeFloat(texture2D(coc, v_Texcoord)) * 2.0 - 1.0);
-#endif
+    vec4 fgColor = vec4(0.0);
+    vec4 bgColor = vec4(0.0);
 
-#ifdef BLUR_COC
-    float cocSum = 0.0;
-#else
-    vec4 color = vec4(0.0);
-#endif
+    float weightFg = 0.0;
+    float weightBg = 0.0;
 
+    float coc0 = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
+    coc0 *= maxCoc;
 
-    float weightSum = 0.0;
-
+    float margin = texelSize.y * 2.0;
     for (int i = 0; i < POISSON_KERNEL_SIZE; i++) {
-        vec2 ofs = poissonKernel[i];
+        vec2 duv = poissonKernel[i];
+        duv = vec2(dot(duv, basis.xy), dot(duv, basis.zw));
+        duv = offset * duv;
+        float dist = length(duv);
 
-        ofs = vec2(dot(ofs, basis.xy), dot(ofs, basis.zw));
+        vec2 uv = v_Texcoord + duv;
+        vec4 texel = decodeHDR(texture2D(mainTex, uv));
+        float coc = texture2D(cocTex, uv).r * 2.0 - 1.0;
+        coc *= maxCoc;
 
-        vec2 uv = v_Texcoord + ofs * offset;
-        vec4 texel = texture2D(texture, uv);
+        // BG: Select the small coc to avoid color bleeding.
+        float bgCoc = max(min(coc0, coc), 0.0);
 
-        float w = 1.0;
-#ifdef BLUR_COC
-        float fCoc = decodeFloat(texel) * 2.0 - 1.0;
-        // Blur coc in nearfield
-        cocSum += clamp(fCoc, -1.0, 0.0) * w;
-#else
-        texel = decodeHDR(texel);
-    #if !defined(BLUR_NEARFIELD)
-        float fCoc = decodeFloat(texture2D(coc, uv)) * 2.0 - 1.0;
-        // TODO DOF premult to avoid bleeding, can be tweaked (currently x^3)
-        // tradeoff between bleeding dof and out of focus object that shrinks too much
-        w *= abs(fCoc);
-    #endif
-        color += texel * w;
-#endif
+        // Compare the CoC to the sample distance
+        // Discard the pixels out of coc. Add a small margin to smooth out.
+        float bgw = clamp((bgCoc - dist + margin) / margin, 0.0, 1.0);
+        float fgw = clamp((-coc  - dist + margin) / margin, 0.0, 1.0);
 
-        weightSum += w;
+        // Cut influence from focused areas because they're darkened by CoC
+        // premultiplying. This is only needed for near field.
+        fgw *= step(texelSize.y, -coc);
+
+        bgColor += bgw * texel;
+        fgColor += fgw * texel;
+
+        weightFg += fgw;
+        weightBg += bgw;
     }
 
-#ifdef BLUR_COC
-    gl_FragColor = encodeFloat(clamp(cocSum / weightSum, -1.0, 0.0) * 0.5 + 0.5);
-#else
-    color /= weightSum;
-    // TODO Windows will not be totally transparent if color.rgb is not 0 and color.a is 0.
-    gl_FragColor = encodeHDR(color);
-#endif
+    fgColor /= max(weightFg, 0.0001);
+    bgColor /= max(weightBg, 0.0001);
+
+    weightFg = clamp(weightFg * 3.1415 / float(POISSON_KERNEL_SIZE), 0.0, 1.0);
+
+    gl_FragColor = encodeHDR(mix(bgColor, fgColor, weightFg));
+    float alpha = clamp(gl_FragColor.a, 0.0, 1.0);
+    alpha = floor(alpha * 255.0);
+
+    // gl_FragColor.a = (alpha * 256.0 + floor(weightFg * 255.0)) / 65535.0;
+    gl_FragColor.a = weightFg;
 }
 
 @end
