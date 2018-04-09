@@ -464,9 +464,9 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, frameb
 
     var maxCoc = this._dofBlurRadius || 10;
     maxCoc /= renderer.getHeight();
-    var dofBlurJitter = Math.random();
+    var jitter = Math.random();
     for (var i = 0; i < this._dofBlurNodes.length; i++) {
-        this._dofBlurNodes[i].setParameter('percent', dofBlurJitter);
+        this._dofBlurNodes[i].setParameter('jitter', jitter);
         this._dofBlurNodes[i].setParameter('poissonKernel', blurKernel);
         this._dofBlurNodes[i].setParameter('maxCoc', maxCoc);
     }
