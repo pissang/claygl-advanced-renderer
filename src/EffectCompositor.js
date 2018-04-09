@@ -360,7 +360,7 @@ EffectCompositor.prototype.setDOFParameter = function (name, value) {
             break;
         case 'quality':
             var kernelSize = ({
-                low: 4, medium: 8, high: 16, ultra: 43
+                low: 12, medium: 20, high: 32, ultra: 43
             })[value] || 8;
             this._dofBlurKernelSize = kernelSize;
             for (var i = 0; i < this._dofBlurNodes.length; i++) {

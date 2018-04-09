@@ -39,6 +39,9 @@ void main()
 }
 @end
 
+@export car.dof.composite
+
+@end
 
 @export car.dof.composite
 
@@ -49,8 +52,6 @@ uniform sampler2D blur;
 uniform sampler2D cocTex;
 uniform float maxCoc;
 
-uniform vec2 textureSize;
-
 varying vec2 v_Texcoord;
 
 @import clay.util.rgbm
@@ -58,7 +59,6 @@ varying vec2 v_Texcoord;
 
 void main()
 {
-    vec2 texelSize = 1.0 / textureSize;
     float coc = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
     vec4 blurTexel = decodeHDR(texture2D(blur, v_Texcoord));
     vec4 sharpTexel = decodeHDR(texture2D(sharp, v_Texcoord));
@@ -81,6 +81,36 @@ void main()
 
 @end
 
+@export car.dof.maxCoc
+
+uniform sampler2D cocTex;
+uniform vec2 textureSize;
+
+varying vec2 v_Texcoord;
+
+float tap(vec2 off) {
+    return texture2D(cocTex, v_Texcoord + off).r * 2.0 - 1.0;
+}
+
+void main()
+{
+    vec4 d = vec4(-1.0, -1.0, +1.0, +1.0) / textureSize.xyxy;
+
+    float coc = tap(vec2(0.0));
+    float lt = tap(d.xy);
+    float rt = tap(d.zy);
+    float lb = tap(d.xw);
+    float rb = tap(d.zw);
+
+    coc = abs(lt) > abs(coc) ? lt : coc;
+    coc = abs(rt) > abs(coc) ? rt : coc;
+    coc = abs(lb) > abs(coc) ? lb : coc;
+    coc = abs(rb) > abs(coc) ? rb : coc;
+
+    gl_FragColor = vec4(coc * 0.5 + 0.5, 0.0,0.0,1.0);
+}
+@end
+
 
 
 @export car.dof.diskBlur
@@ -89,6 +119,7 @@ void main()
 
 uniform sampler2D mainTex;
 uniform sampler2D cocTex;
+uniform sampler2D maxCocTex;
 
 uniform float maxCoc;
 uniform vec2 textureSize;
@@ -110,7 +141,8 @@ float nrand(const in vec2 n) {
 void main()
 {
     vec2 texelSize = 1.0 / textureSize;
-    vec2 offset = vec2(maxCoc * textureSize.x / textureSize.y, maxCoc);
+    float maxCocInTile = abs(texture2D(maxCocTex, v_Texcoord).r * 2.0 - 1.0);
+    vec2 offset = vec2(maxCoc * texelSize.x / texelSize.y, maxCoc) * maxCocInTile;
 
     float rnd = 6.28318 * nrand(v_Texcoord + 0.07 * percent);
     float cosa = cos(rnd);
@@ -128,6 +160,7 @@ void main()
 
     float margin = texelSize.y * 2.0;
     for (int i = 0; i < POISSON_KERNEL_SIZE; i++) {
+        // TODO Use min/max tile
         vec2 duv = poissonKernel[i];
         duv = vec2(dot(duv, basis.xy), dot(duv, basis.zw));
         duv = offset * duv;
@@ -142,13 +175,13 @@ void main()
         float bgCoc = max(min(coc0, coc), 0.0);
 
         // Compare the CoC to the sample distance
-        // Discard the pixels out of coc. Add a small margin to smooth out.
+        // Discard the pixels out of coc(scatter as gather). Add a small margin to smooth out.
         float bgw = clamp((bgCoc - dist + margin) / margin, 0.0, 1.0);
         float fgw = clamp((-coc  - dist + margin) / margin, 0.0, 1.0);
 
         // Cut influence from focused areas because they're darkened by CoC
         // premultiplying. This is only needed for near field.
-        fgw *= step(texelSize.y, -coc);
+        // fgw *= step(texelSize.y, -coc);
 
         bgColor += bgw * texel;
         fgColor += fgw * texel;
@@ -166,7 +199,7 @@ void main()
     float alpha = clamp(gl_FragColor.a, 0.0, 1.0);
     alpha = floor(alpha * 255.0);
 
-    // gl_FragColor.a = (alpha * 256.0 + floor(weightFg * 255.0)) / 65535.0;
+    gl_FragColor.a = (alpha * 256.0 + floor(weightFg * 255.0)) / 65535.0;
     gl_FragColor.a = weightFg;
 }
 
