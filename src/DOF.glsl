@@ -94,7 +94,8 @@ float tap(vec2 off) {
 
 void main()
 {
-    vec4 d = vec4(-1.0, -1.0, +1.0, +1.0) / textureSize.xyxy;
+    vec2 texelSize = 1.0 / textureSize;
+    vec4 d = vec4(-1.0, -1.0, +1.0, +1.0) * texelSize.xyxy;
 
     float coc = tap(vec2(0.0));
     float lt = tap(d.xy);
@@ -119,14 +120,14 @@ void main()
 
 uniform sampler2D mainTex;
 uniform sampler2D cocTex;
-uniform sampler2D maxCocTex;
+// uniform sampler2D maxCocTex;
 
 uniform float maxCoc;
 uniform vec2 textureSize;
 
 uniform vec2 poissonKernel[POISSON_KERNEL_SIZE];
 
-uniform float percent;
+uniform float jitter;
 
 varying vec2 v_Texcoord;
 
@@ -141,10 +142,10 @@ float nrand(const in vec2 n) {
 void main()
 {
     vec2 texelSize = 1.0 / textureSize;
-    float maxCocInTile = abs(texture2D(maxCocTex, v_Texcoord).r * 2.0 - 1.0);
-    vec2 offset = vec2(maxCoc * texelSize.x / texelSize.y, maxCoc) * maxCocInTile;
+    // float maxCocInTile = abs(texture2D(maxCocTex, v_Texcoord).r * 2.0 - 1.0);
+    vec2 offset = vec2(maxCoc * texelSize.x / texelSize.y, maxCoc);
 
-    float rnd = 6.28318 * nrand(v_Texcoord + 0.07 * percent);
+    float rnd = 6.28318 * nrand(v_Texcoord + jitter);
     float cosa = cos(rnd);
     float sina = sin(rnd);
     vec4 basis = vec4(cosa, -sina, sina, cosa);
@@ -199,7 +200,8 @@ void main()
     float alpha = clamp(gl_FragColor.a, 0.0, 1.0);
     alpha = floor(alpha * 255.0);
 
-    gl_FragColor.a = (alpha * 256.0 + floor(weightFg * 255.0)) / 65535.0;
+    // gl_FragColor.a = (alpha * 256.0 + floor(weightFg * 255.0)) / 65535.0;
+    // gl_FragColor.rgb = fgColor.rgb;
     gl_FragColor.a = weightFg;
 }
 
