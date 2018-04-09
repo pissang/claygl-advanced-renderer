@@ -359,14 +359,11 @@ EffectCompositor.prototype.setDOFParameter = function (name, value) {
             this._dofBlurRadius = value;
             break;
         case 'quality':
-            var kernelSize = ({
-                low: 12, medium: 20, high: 32, ultra: 43
-            })[value] || 8;
-            this._dofBlurKernelSize = kernelSize;
+            this._dofBlurKernel = poissonKernel[value] || poissonKernel.medium;
+            var kernelSize = this._dofBlurKernel.length / 2;
             for (var i = 0; i < this._dofBlurNodes.length; i++) {
                 this._dofBlurNodes[i].define('POISSON_KERNEL_SIZE', kernelSize);
             }
-            this._dofBlurKernel = new Float32Array(kernelSize * 2);
             break;
     }
 };
@@ -464,13 +461,6 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, frameb
     this._cocNode.setParameter('depth', this._depthTexture);
 
     var blurKernel = this._dofBlurKernel;
-    var blurKernelSize = this._dofBlurKernelSize;
-    var frameAll = Math.floor(poissonKernel.length / 2 / blurKernelSize);
-    var kernelOffset = frame % frameAll;
-
-    for (var i = 0; i < blurKernelSize * 2; i++) {
-        blurKernel[i] = poissonKernel[i + kernelOffset * blurKernelSize * 2];
-    }
 
     var maxCoc = this._dofBlurRadius || 10;
     maxCoc /= renderer.getHeight();
