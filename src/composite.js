@@ -25,6 +25,9 @@ export default {
             },
             'parameters' : {
                 'textureSize': 'expr( [width * 1.0, height * 1.0] )'
+            },
+            'defines': {
+                'ANTI_FLICKER': null
             }
         },
 
@@ -583,8 +586,29 @@ export default {
             'name': 'dof_blur',
             'shader': '#source(car.dof.diskBlur)',
             'inputs': {
-                'mainTex': 'source',
+                'mainTex': 'source_half',
                 // 'maxCocTex': 'coc_max_tile_64',
+                'cocTex': 'coc'
+            },
+            'outputs': {
+                'color': {
+                    'parameters': {
+                        'width': 'expr(width / 2.0 * 1.0)',
+                        'height': 'expr(height / 2.0 * 1.0)',
+                        'type': 'HALF_FLOAT'
+                    }
+                }
+            },
+            'parameters': {
+                'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )'
+            }
+        },
+
+        {
+            'name': 'dof_blur_upsample',
+            'shader': '#source(car.dof.extraBlur)',
+            'inputs': {
+                'blur': 'dof_blur',
                 'cocTex': 'coc'
             },
             'outputs': {
@@ -597,7 +621,7 @@ export default {
                 }
             },
             'parameters': {
-                'textureSize': 'expr( [width * 1.0, height * 1.0] )'
+                'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )'
             }
         },
 
@@ -606,7 +630,7 @@ export default {
             'shader': '#source(car.dof.composite)',
             'inputs': {
                 'sharp': 'source',
-                'blur': 'dof_blur',
+                'blur': 'dof_blur_upsample',
                 'cocTex': 'coc'
             },
             'outputs': {

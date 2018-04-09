@@ -41,10 +41,6 @@ void main()
 
 @export car.dof.composite
 
-@end
-
-@export car.dof.composite
-
 #define DEBUG 0
 
 uniform sampler2D sharp;
@@ -73,10 +69,50 @@ void main()
     // Convert CoC to far field alpha value.
     float ffa = smoothstep(0.0, 0.2, coc);
     // TODO
-    gl_FragColor = mix(mix(sharpTexel, blurTexel, ffa), blurTexel, nfa);
+    // gl_FragColor = mix(mix(sharpTexel, blurTexel, ffa), blurTexel, nfa);
+    gl_FragColor = mix(sharpTexel, blurTexel, ffa + nfa - ffa * nfa);
 
-    // gl_FragColor = vec4(vec3(abs(coc)), 1.0);
+    // gl_FragColor = vec4(vec3(abs(nfa)), 1.0);
     // gl_FragColor = vec4(blurTexel.rgb, 1.0);
+}
+
+@end
+
+@export car.dof.extraBlur
+// Do upsample and 9-tap disc blur
+uniform sampler2D cocTex;
+uniform sampler2D blur;
+
+uniform vec2 textureSize;
+
+varying vec2 v_Texcoord;
+
+void main()
+{
+    vec2 kernel[9];
+
+    kernel[0] = vec2(0.0, 0.0);
+    kernel[1] = vec2(-0.9745327951958312, 0.21867486523537);
+    kernel[2] = vec2(0.3777025447567271, 0.9202783758545757);
+    kernel[3] = vec2(0.902187310588039, -0.3483859389475743);
+    kernel[4] = vec2(-0.30698572999585466, -0.9297615216865224);
+    kernel[5] = vec2(-0.5044353449794678, 0.799706031619336);
+    kernel[6] = vec2(0.42218664766829966, -0.8913520930728434);
+    kernel[7] = vec2(0.9206341562564012, 0.3586614465551363);
+    kernel[8] = vec2(-0.7527561502723913, -0.4015851235140097);
+
+    vec4 color = vec4(0.0);
+    float w = 0.0;
+    for (int i = 0; i < 9; i++) {
+        vec2 uv = v_Texcoord + kernel[i] / textureSize;
+        float coc = abs(texture2D(cocTex, uv).r * 2.0 - 1.0);
+        vec4 texel = texture2D(blur, uv);
+
+        color += texel * coc;
+        w += coc;
+    }
+
+    gl_FragColor = color / max(w, 0.0001);
 }
 
 @end
@@ -145,7 +181,7 @@ void main()
     // float maxCocInTile = abs(texture2D(maxCocTex, v_Texcoord).r * 2.0 - 1.0);
     vec2 offset = vec2(maxCoc * texelSize.x / texelSize.y, maxCoc);
 
-    float rnd = 6.28318 * nrand(v_Texcoord + jitter);
+    float rnd = 6.28318 * nrand(v_Texcoord + 0.07 * jitter);
     float cosa = cos(rnd);
     float sina = sin(rnd);
     vec4 basis = vec4(cosa, -sina, sina, cosa);
@@ -167,7 +203,7 @@ void main()
         duv = offset * duv;
         float dist = length(duv);
 
-        vec2 uv = v_Texcoord + duv;
+        vec2 uv = clamp(v_Texcoord + duv, vec2(0.0), vec2(1.0));
         vec4 texel = decodeHDR(texture2D(mainTex, uv));
         float coc = texture2D(cocTex, uv).r * 2.0 - 1.0;
         coc *= maxCoc;
@@ -182,7 +218,7 @@ void main()
 
         // Cut influence from focused areas because they're darkened by CoC
         // premultiplying. This is only needed for near field.
-        // fgw *= step(texelSize.y, -coc);
+        fgw *= step(texelSize.y, -coc);
 
         bgColor += bgw * texel;
         fgColor += fgw * texel;
@@ -201,7 +237,7 @@ void main()
     alpha = floor(alpha * 255.0);
 
     // gl_FragColor.a = (alpha * 256.0 + floor(weightFg * 255.0)) / 65535.0;
-    // gl_FragColor.rgb = fgColor.rgb;
+    // gl_FragColor.rgb = vec3(weightFg);
     gl_FragColor.a = weightFg;
 }
 
