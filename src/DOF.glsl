@@ -103,8 +103,9 @@ void main()
 
     vec4 color = vec4(0.0);
     float w = 0.0;
+    float coc0 = abs(texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0);
     for (int i = 0; i < 9; i++) {
-        vec2 uv = v_Texcoord + kernel[i] / textureSize;
+        vec2 uv = v_Texcoord + kernel[i] / textureSize * coc0 * 2.0;
         float coc = abs(texture2D(cocTex, uv).r * 2.0 - 1.0);
         vec4 texel = texture2D(blur, uv);
 
@@ -156,7 +157,7 @@ void main()
 
 uniform sampler2D mainTex;
 uniform sampler2D cocTex;
-// uniform sampler2D maxCocTex;
+uniform sampler2D maxCocTex;
 
 uniform float maxCoc;
 uniform vec2 textureSize;
@@ -178,8 +179,8 @@ float nrand(const in vec2 n) {
 void main()
 {
     vec2 texelSize = 1.0 / textureSize;
-    // float maxCocInTile = abs(texture2D(maxCocTex, v_Texcoord).r * 2.0 - 1.0);
-    vec2 offset = vec2(maxCoc * texelSize.x / texelSize.y, maxCoc);
+    float maxCocInTile = abs(texture2D(maxCocTex, v_Texcoord).r * 2.0 - 1.0);
+    vec2 offset = vec2(maxCoc * texelSize.x / texelSize.y, maxCoc) * maxCocInTile;
 
     float rnd = 6.28318 * nrand(v_Texcoord + 0.07 * jitter);
     float cosa = cos(rnd);

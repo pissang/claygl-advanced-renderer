@@ -432,7 +432,7 @@ EffectCompositor.prototype.setColorCorrection = function (type, value) {
     this._compositeNode.setParameter(type, value);
 };
 
-EffectCompositor.prototype.composite = function (renderer, scene, camera, framebuffer, frame) {
+EffectCompositor.prototype.composite = function (renderer, scene, camera, framebuffer, frame, accumulating) {
 
     var sourceTexture = this._sourceTexture;
     var targetTexture = sourceTexture;
@@ -464,9 +464,9 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, frameb
 
     var maxCoc = this._dofBlurRadius || 10;
     maxCoc /= renderer.getHeight();
-    var jitter = Math.random();
+    // var jitter = Math.random();
     for (var i = 0; i < this._dofBlurNodes.length; i++) {
-        this._dofBlurNodes[i].setParameter('jitter', jitter);
+        this._dofBlurNodes[i].setParameter('jitter', accumulating ? frame / 30 : 0);
         this._dofBlurNodes[i].setParameter('poissonKernel', blurKernel);
         this._dofBlurNodes[i].setParameter('maxCoc', maxCoc);
     }

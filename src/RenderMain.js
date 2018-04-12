@@ -167,7 +167,7 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
         frameBuffer.unbind(renderer);
 
         if (this.needsTemporalSS() && (this._temporalSupportDynamic || accumulating)) {
-            this._compositor.composite(renderer, scene, camera, this._temporalSS.getSourceFrameBuffer(), this._temporalSS.getFrame());
+            this._compositor.composite(renderer, scene, camera, this._temporalSS.getSourceFrameBuffer(), this._temporalSS.getFrame(), accumulating);
             this._temporalSS.render(renderer, camera, accumulating);
         }
         else {
