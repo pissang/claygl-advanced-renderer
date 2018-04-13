@@ -801,7 +801,7 @@ export default {
             'name': 'dof_composite',
             'shader': '#source(car.dof.composite)',
             'inputs': {
-                'sharp': 'source',
+                'sharpTex': 'source',
                 'farTex': 'dof_blur_far_final',
                 'nearTex': 'dof_blur_near_final',
                 'cocTex': 'coc'

@@ -43,11 +43,12 @@ void main()
 
 #define DEBUG 0
 
-uniform sampler2D sharp;
+uniform sampler2D sharpTex;
 uniform sampler2D nearTex;
 uniform sampler2D farTex;
 uniform sampler2D cocTex;
 uniform float maxCoc;
+uniform float minCoc;
 
 varying vec2 v_Texcoord;
 
@@ -58,19 +59,18 @@ void main()
     float coc = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
     vec4 nearTexel = decodeHDR(texture2D(nearTex, v_Texcoord));
     vec4 farTexel = decodeHDR(texture2D(farTex, v_Texcoord));
-    vec4 sharpTexel = decodeHDR(texture2D(sharp, v_Texcoord));
+    vec4 sharpTexel = decodeHDR(texture2D(sharpTex, v_Texcoord));
 
     float nfa = nearTexel.a;
 
     // Convert CoC to far field alpha value.
     float ffa = smoothstep(0.0, 0.2, coc);
-    // TODO
-    gl_FragColor = mix(mix(sharpTexel, farTexel, ffa), nearTexel, nfa);
-    gl_FragColor.a = max(max(sharpTexel.a, nearTexel.a), farTexel.a);
-    // gl_FragColor = mix(sharpTexel, nearTexel, ffa + nfa - ffa * nfa);
 
-    // gl_FragColor = vec4(vec3(abs(nfa)), 1.0);
-    // gl_FragColor = nearTexel;
+    gl_FragColor.rgb = mix(mix(sharpTexel.rgb, farTexel.rgb, ffa), nearTexel.rgb, nfa);
+
+    gl_FragColor.a = max(max(sharpTexel.a, nearTexel.a), farTexel.a);
+
+    // gl_FragColor = sharpTexel;
 }
 
 @end
@@ -89,9 +89,9 @@ void main()
     vec4 color = decodeHDR(texture2D(mainTex, v_Texcoord));
     float coc = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
 #ifdef FARFIELD
-    color *= step(0.001, coc);
+    color *= step(0.0, coc);
 #else
-    color *= step(0.001, -coc);
+    color *= step(0.0, -coc);
 #endif
 
     gl_FragColor = encodeHDR(color);
@@ -133,6 +133,9 @@ void main()
 
 
 @export car.dof.blur
+// https://www.shadertoy.com/view/Xd2BWc
+// https://bartwronski.com/2017/08/06/separable-bokeh/
+// https://www.ea.com/frostbite/news/circular-separable-convolution-depth-of-field
 
 #define KERNEL_SIZE 17
 
@@ -179,6 +182,9 @@ void main()
 
 #ifdef FARFIELD
     float coc0 = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
+    if (coc0 <= 0.0) {
+        discard;
+    }
 #else
     float maxCoc0 = texture2D(maxCocTex, v_Texcoord).r * 2.0 - 1.0;
     float coc0 = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
@@ -209,7 +215,6 @@ void main()
 
     for (int i = 0; i < KERNEL_SIZE; i++) {
         vec2 duv = (float(i) - halfKernelSize) * offset;
-        float dist = length(duv);
         vec2 uv = clamp(v_Texcoord + duv, vec2(0.0), vec2(1.0));
         float coc = texture2D(cocTex, uv).r * 2.0 - 1.0;
         coc *= maxCoc;
@@ -217,7 +222,8 @@ void main()
         float w = 1.0;
 #ifdef FARFIELD
         // Reject pixels in focus
-        w = step(margin, coc);
+        // PENDING A tiny threshold?
+        w = step(0.0, coc);
 #endif
         weight += w;
 

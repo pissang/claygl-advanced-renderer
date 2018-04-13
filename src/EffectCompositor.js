@@ -467,15 +467,18 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, frameb
 
     var maxCoc = this._dofBlurRadius || 10;
     maxCoc /= renderer.getHeight();
+    var minCoc = 0.5 / renderer.getHeight();
     // var jitter = Math.random();
     for (var i = 0; i < this._dofBlurNodes.length; i++) {
         var blurNode = this._dofBlurNodes[i];
         blurNode.setParameter('kernel1', circularSeparateKernel.component1);
         blurNode.setParameter('kernel2', circularSeparateKernel.component2);
         blurNode.setParameter('maxCoc', maxCoc);
+        // blurNode.setParameter('minCoc', minCoc);
     }
     this._cocNode.setParameter('maxCoc', maxCoc);
     this._dofCompositeNode.setParameter('maxCoc', maxCoc);
+    // this._dofCompositeNode.setParameter('minCoc', minCoc);
 
     this._cocNode.setParameter('zNear', camera.near);
     this._cocNode.setParameter('zFar', camera.far);
