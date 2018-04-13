@@ -61,10 +61,10 @@ void main()
     vec4 farTexel = decodeHDR(texture2D(farTex, v_Texcoord));
     vec4 sharpTexel = decodeHDR(texture2D(sharpTex, v_Texcoord));
 
-    float nfa = nearTexel.a;
+    float nfa = clamp(nearTexel.a, 0.0, 1.0);
 
     // Convert CoC to far field alpha value.
-    float ffa = smoothstep(0.0, 0.2, coc);
+    float ffa = smoothstep(minCoc, 0.2, coc);
 
     gl_FragColor.rgb = mix(mix(sharpTexel.rgb, farTexel.rgb, ffa), nearTexel.rgb, nfa);
 
@@ -79,6 +79,7 @@ void main()
 
 uniform sampler2D mainTex;
 uniform sampler2D cocTex;
+uniform float minCoc;
 
 varying vec2 v_Texcoord;
 
@@ -89,9 +90,9 @@ void main()
     vec4 color = decodeHDR(texture2D(mainTex, v_Texcoord));
     float coc = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
 #ifdef FARFIELD
-    color *= step(0.0, coc);
+    color *= step(minCoc, coc);
 #else
-    color *= step(0.0, -coc);
+    color *= step(minCoc, -coc);
 #endif
 
     gl_FragColor = encodeHDR(color);
@@ -210,8 +211,6 @@ void main()
 
     vec2 offset = vec2(texelSize.x / texelSize.y * coc0 / halfKernelSize, 0.0);
 #endif
-
-    float margin = texelSize.y;
 
     for (int i = 0; i < KERNEL_SIZE; i++) {
         vec2 duv = (float(i) - halfKernelSize) * offset;
