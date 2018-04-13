@@ -2,7 +2,7 @@ import { Shader, Texture2D, Texture, FrameBuffer, createCompositor, deferred, sh
 
 import SSAOPass from './SSAOPass';
 import SSRPass from './SSRPass';
-import poissonKernel from './poissonKernel';
+import circularSeparateKernel from './circularSeparateKernel';
 
 import effectJson from './composite.js';
 
@@ -60,7 +60,10 @@ function EffectCompositor() {
     this._compositeNode = this._compositor.getNodeByName('composite');
     this._fxaaNode = this._compositor.getNodeByName('FXAA');
 
-    this._dofBlurNodes = ['dof_blur'].map(function (name) {
+    this._dofBlurNodes = [
+        'dof_blur_far_1', 'dof_blur_far_2', 'dof_blur_far_3', 'dof_blur_far_4', 'dof_blur_far_final',
+        'dof_blur_near_1', 'dof_blur_near_2', 'dof_blur_near_3', 'dof_blur_near_4', 'dof_blur_near_final'
+    ].map(function (name) {
         return this._compositor.getNodeByName(name);
     }, this);
     this._dofCompositeNode = this._compositor.getNodeByName('dof_composite');
@@ -358,13 +361,13 @@ EffectCompositor.prototype.setDOFParameter = function (name, value) {
         case 'blurRadius':
             this._dofBlurRadius = value;
             break;
-        case 'quality':
-            this._dofBlurKernel = poissonKernel[value] || poissonKernel.medium;
-            var kernelSize = this._dofBlurKernel.length / 2;
-            for (var i = 0; i < this._dofBlurNodes.length; i++) {
-                this._dofBlurNodes[i].define('POISSON_KERNEL_SIZE', kernelSize);
-            }
-            break;
+        // case 'quality':
+        //     this._dofBlurKernel = poissonKernel[value] || poissonKernel.medium;
+        //     var kernelSize = this._dofBlurKernel.length / 2;
+        //     for (var i = 0; i < this._dofBlurNodes.length; i++) {
+        //         this._dofBlurNodes[i].define('POISSON_KERNEL_SIZE', kernelSize);
+        //     }
+        //     break;
     }
 };
 
@@ -460,15 +463,16 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, frameb
 
     this._cocNode.setParameter('depth', this._depthTexture);
 
-    var blurKernel = this._dofBlurKernel;
+    // var blurKernel = this._dofBlurKernel;
 
     var maxCoc = this._dofBlurRadius || 10;
     maxCoc /= renderer.getHeight();
     // var jitter = Math.random();
     for (var i = 0; i < this._dofBlurNodes.length; i++) {
-        this._dofBlurNodes[i].setParameter('jitter', accumulating ? frame / 30 : 0);
-        this._dofBlurNodes[i].setParameter('poissonKernel', blurKernel);
-        this._dofBlurNodes[i].setParameter('maxCoc', maxCoc);
+        var blurNode = this._dofBlurNodes[i];
+        blurNode.setParameter('kernel1', circularSeparateKernel.component1);
+        blurNode.setParameter('kernel2', circularSeparateKernel.component2);
+        blurNode.setParameter('maxCoc', maxCoc);
     }
     this._cocNode.setParameter('maxCoc', maxCoc);
     this._dofCompositeNode.setParameter('maxCoc', maxCoc);

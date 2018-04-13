@@ -1,3 +1,17 @@
+var DOF_BLUR_OUTPUTS = {
+    'color': {
+        'parameters': {
+            'width': 'expr(width / 2.0 * 1.0)',
+            'height': 'expr(height / 2.0 * 1.0)',
+            'type': 'HALF_FLOAT'
+        }
+    }
+};
+
+var DOF_BLUR_PARAMETERS = {
+    'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )'
+};
+
 export default {
     'type' : 'compositor',
     'nodes' : [
@@ -580,55 +594,216 @@ export default {
         },
 
         {
-            'name': 'dof_blur',
-            'shader': '#source(car.dof.diskBlur)',
+            'name': 'dof_separate_far',
+            'shader': '#source(car.dof.separate)',
             'inputs': {
-                // TODO
-                'mainTex': 'source_half',
-                'maxCocTex': 'coc_max_tile_64',
+                'mainTex': 'source',
                 'cocTex': 'coc'
             },
-            'outputs': {
-                'color': {
-                    'parameters': {
-                        'width': 'expr(width / 2.0 * 1.0)',
-                        'height': 'expr(height / 2.0 * 1.0)',
-                        'type': 'HALF_FLOAT'
-                    }
-                }
-            },
-            'parameters': {
-                'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )'
+            'outputs': DOF_BLUR_OUTPUTS,
+            'defines': {
+                'FARFIELD': null
             }
         },
 
         {
-            'name': 'dof_blur_upsample',
-            'shader': '#source(car.dof.extraBlur)',
+            'name': 'dof_separate_near',
+            'shader': '#source(car.dof.separate)',
             'inputs': {
-                'blur': 'dof_blur',
+                'mainTex': 'source',
                 'cocTex': 'coc'
             },
-            'outputs': {
-                'color': {
-                    'parameters': {
-                        'width': 'expr(width * 1.0)',
-                        'height': 'expr(height * 1.0)',
-                        'type': 'HALF_FLOAT'
-                    }
-                }
+            'outputs': DOF_BLUR_OUTPUTS
+        },
+
+        {
+            'name': 'dof_blur_far_1',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'mainTex': 'dof_separate_far',
+                'cocTex': 'coc'
             },
-            'parameters': {
-                'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )'
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'R_PASS': null,
+                'FARFIELD': null
             }
         },
+
+        {
+            'name': 'dof_blur_far_2',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'mainTex': 'dof_separate_far',
+                'cocTex': 'coc'
+            },
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'G_PASS': null,
+                'FARFIELD': null
+            }
+        },
+
+
+        {
+            'name': 'dof_blur_far_3',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'mainTex': 'dof_separate_far',
+                'cocTex': 'coc'
+            },
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'B_PASS': null,
+                'FARFIELD': null
+            }
+        },
+
+
+        {
+            'name': 'dof_blur_far_4',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'mainTex': 'dof_separate_far',
+                'cocTex': 'coc'
+            },
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'A_PASS': null,
+                'FARFIELD': null
+            }
+        },
+
+        {
+            'name': 'dof_blur_far_final',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'rTex': 'dof_blur_far_1',
+                'gTex': 'dof_blur_far_2',
+                'bTex': 'dof_blur_far_3',
+                'aTex': 'dof_blur_far_4',
+                'cocTex': 'coc'
+            },
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'FINAL_PASS': null,
+                'FARFIELD': null
+            }
+        },
+
+        {
+            'name': 'dof_blur_near_1',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'mainTex': 'dof_separate_near',
+                'cocTex': 'coc',
+                'maxCocTex': 'coc_max_tile_64'
+            },
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'R_PASS': null
+            }
+        },
+
+        {
+            'name': 'dof_blur_near_2',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'mainTex': 'dof_separate_near',
+                'cocTex': 'coc',
+                'maxCocTex': 'coc_max_tile_64'
+            },
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'G_PASS': null
+            }
+        },
+
+
+        {
+            'name': 'dof_blur_near_3',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'mainTex': 'dof_separate_near',
+                'cocTex': 'coc',
+                'maxCocTex': 'coc_max_tile_64'
+            },
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'B_PASS': null
+            }
+        },
+
+        {
+            'name': 'dof_blur_near_4',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'mainTex': 'dof_separate_near',
+                'cocTex': 'coc',
+                'maxCocTex': 'coc_max_tile_64'
+            },
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'A_PASS': null
+            }
+        },
+
+        {
+            'name': 'dof_blur_near_final',
+            'shader': '#source(car.dof.blur)',
+            'inputs': {
+                'rTex': 'dof_blur_near_1',
+                'gTex': 'dof_blur_near_2',
+                'bTex': 'dof_blur_near_3',
+                'aTex': 'dof_blur_near_4',
+                'cocTex': 'coc',
+                'maxCocTex': 'coc_max_tile_64'
+            },
+            'outputs': DOF_BLUR_OUTPUTS,
+            'parameters': DOF_BLUR_PARAMETERS,
+            'defines': {
+                'FINAL_PASS': null
+            }
+        },
+
+
+        // {
+        //     'name': 'dof_blur_upsample',
+        //     'shader': '#source(car.dof.extraBlur)',
+        //     'inputs': {
+        //         'blur': 'dof_blur',
+        //         'cocTex': 'coc'
+        //     },
+        //     'outputs': {
+        //         'color': {
+        //             'parameters': {
+        //                 'width': 'expr(width * 1.0)',
+        //                 'height': 'expr(height * 1.0)',
+        //                 'type': 'HALF_FLOAT'
+        //             }
+        //         }
+        //     },
+        //     'parameters': {
+        //         'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )'
+        //     }
+        // },
 
         {
             'name': 'dof_composite',
             'shader': '#source(car.dof.composite)',
             'inputs': {
                 'sharp': 'source',
-                'blur': 'dof_blur_upsample',
+                'farTex': 'dof_blur_far_final',
+                'nearTex': 'dof_blur_near_final',
                 'cocTex': 'coc'
             },
             'outputs': {
