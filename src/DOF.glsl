@@ -90,7 +90,7 @@ void main()
     vec4 color = decodeHDR(texture2D(mainTex, v_Texcoord));
     float coc = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
 #ifdef FARFIELD
-    color.a *= step(minCoc, coc);
+    color *= step(minCoc, coc);
 #else
     // Will have a dark halo on the edge after blurred if set whole color black.
     // Only set alpha to zero.
@@ -102,34 +102,31 @@ void main()
 @end
 
 
-@export car.dof.maxCoc
+@export car.dof.dilateCoc
+
+#define SHADER_NAME dilateCoc
 
 uniform sampler2D cocTex;
 uniform vec2 textureSize;
 
 varying vec2 v_Texcoord;
 
-float tap(vec2 off) {
-    return texture2D(cocTex, v_Texcoord + off).r * 2.0 - 1.0;
-}
-
 void main()
 {
-    vec2 texelSize = 1.0 / textureSize;
-    vec4 d = vec4(-1.0, -1.0, +1.0, +1.0) * texelSize.xyxy;
+#ifdef VERTICAL
+    vec2 offset = vec2(0.0, 1.0 / textureSize.y);
+#else
+    vec2 offset = vec2(1.0 / textureSize.x, 0.0);
+#endif
 
-    float coc = tap(vec2(0.0));
-    float lt = tap(d.xy);
-    float rt = tap(d.zy);
-    float lb = tap(d.xw);
-    float rb = tap(d.zw);
-
-    coc = abs(lt) > abs(coc) ? lt : coc;
-    coc = abs(rt) > abs(coc) ? rt : coc;
-    coc = abs(lb) > abs(coc) ? lb : coc;
-    coc = abs(rb) > abs(coc) ? rb : coc;
-
-    gl_FragColor = vec4(coc * 0.5 + 0.5, 0.0,0.0,1.0);
+    float coc0 = 1.0;
+    for (int i = 0; i < 17; i++) {
+        vec2 duv = (float(i) - 8.0) * offset * 2.0;
+        float coc = texture2D(cocTex, v_Texcoord + duv).r * 2.0 - 1.0;
+        coc *= pow(1.0 - abs(float(i) - 8.0) / 10.0, 2.0);
+        coc0 = min(coc0, coc);
+    }
+    gl_FragColor = vec4(coc0 * 0.5 + 0.5, 0.0, 0.0, 1.0);
 }
 @end
 
@@ -160,7 +157,7 @@ uniform sampler2D aTex;
 uniform sampler2D mainTex;
 #endif
 uniform sampler2D cocTex;
-uniform sampler2D maxCocTex;
+uniform sampler2D dilateCocTex;
 
 uniform float maxCoc;
 uniform vec2 textureSize;
@@ -185,18 +182,16 @@ void main()
 
 #ifdef FARFIELD
     float coc0 = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
-    if (coc0 <= 0.0) {
-        discard;
-    }
 #else
-    float maxCoc0 = texture2D(maxCocTex, v_Texcoord).r * 2.0 - 1.0;
-    float coc0 = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
-    if (coc0 >= 0.0) {
-        // Try to gathering the texel from nearfield in pixel of farfield.
-        // To achieve bleeding from nearfield.
-        coc0 = maxCoc0;
-    }
+    // Try to gathering the texel from nearfield in pixel of farfield.
+    // To achieve bleeding from nearfield.
+    float coc0 = -(texture2D(dilateCocTex, v_Texcoord).r * 2.0 - 1.0);
 #endif
+    if (coc0 <= 0.0) {
+        // Write black color. DON'T discard because the color of previous pass won't be cleared.
+        gl_FragColor = vec4(0.0);
+        return;
+    }
     coc0 *= maxCoc;
 
 // TODO Nearfield use one component.

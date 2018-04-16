@@ -1,0 +1,94 @@
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="../../claygl/dist/claygl.js"></script>
+    <!-- <script src="https://rawgit.com/pissang/claygl/master/dist/claygl.min.js"></script> -->
+    <script src="../dist/claygl-advanced-renderer.js"></script>
+    <title>Depth Of Field</title>
+</head>
+<body>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
+
+    <div id="main"></div>
+
+    <script type="text/javascript">
+        clay.application.create('#main', {
+            width: window.innerWidth,
+            height: window.innerHeight,
+
+            devicePixelRatio: 1,
+
+            autoRender: false,
+
+            event: true,
+
+            init: function (app) {
+                app.renderer.clearColor = [0,0,0,1];
+                this._advancedRenderer = new ClayAdvancedRenderer(app.renderer, app.scene, app.timeline, {
+                    shadow: true,
+                    temporalSuperSampling: {
+                        enable: true
+                    },
+                    postEffect: {
+                        enable: true,
+                        bloom: {
+                            enable: false
+                        },
+                        screenSpaceAmbientOcclusion: {
+                            enable: false,
+                            intensity: 1.5,
+                            radius: 2
+                        },
+                        depthOfField: {
+                            enable: true,
+                            blurRadius: 15,
+                            focalDistance: 10,
+                            aperture: 1.0
+                        }
+                    }
+                });
+                this._camera = app.createCamera([0, 10, 5], [0, 10, 0]);
+
+                app.createAmbientCubemapLight('./asset/hdr/pisa.hdr', 0.2, 0.4, 0);
+                this._mainLight = app.createDirectionalLight([-1, -1, -1]);
+                this._mainLight.shadowResolution = 2048;
+
+                var plane = app.createPlane();
+                plane.castShadow = false;
+                plane.rotation.rotateX(-Math.PI / 2);
+                plane.scale.set(200, 200, 1);
+
+                var geo = new clay.geometry.Cylinder();
+                for (var i = 0; i < 5; i++) {
+                    for (var j = 0; j < 5; j++) {
+                        var column = app.createMesh(geo, {
+                            color: [Math.random(), Math.random(), Math.random()],
+                            roughness: 0.2
+                        });
+                        column.position.set(
+                            (i - 2) * 5, 5, (j - 2) * 5
+                        );
+                        column.scale.set(1, 5, 1);
+                    }
+                }
+
+                this._control = new clay.plugin.FreeControl({
+                    timeline: app.timeline,
+                    target: this._camera,
+                    domElement: app.container
+                });
+            },
+
+            loop: function (app) {
+                this._control.update(Math.min(app.frameTime), 50);
+                this._advancedRenderer.render();
+            }
+        })
+    </script>
+</body>
+</html>

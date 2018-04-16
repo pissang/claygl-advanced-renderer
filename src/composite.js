@@ -1,15 +1,15 @@
 var DOF_BLUR_OUTPUTS = {
     'color': {
         'parameters': {
-            'width': 'expr(width / 2.0 * 1.0)',
-            'height': 'expr(height / 2.0 * 1.0)',
+            'width': 'expr(width / 1.0 * 1.0)',
+            'height': 'expr(height / 1.0 * 1.0)',
             'type': 'HALF_FLOAT'
         }
     }
 };
 
 var DOF_BLUR_PARAMETERS = {
-    'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )'
+    'textureSize': 'expr( [width / 1.0 * 1.0, height / 1.0 * 1.0] )'
 };
 
 export default {
@@ -467,129 +467,45 @@ export default {
         },
 
         {
-            'name': 'coc_max_tile_2',
-            'shader': '#source(car.dof.maxCoc)',
+            'name': 'coc_dilate_1',
+            'shader': '#source(car.dof.dilateCoc)',
             'inputs': {
                 'cocTex': 'coc'
             },
             'outputs': {
                 'color': {
                     'parameters': {
-                        'width': 'expr(width / 2.0 * 1.0)',
-                        'height': 'expr(height / 2.0 * 1.0)',
-                        'minFilter': 'NEAREST',
-                        'magFilter': 'NEAREST'
+                        'width': 'expr(width * 1.0)',
+                        'height': 'expr(height * 1.0)',
+                        'type': 'HALF_FLOAT'
                     }
                 }
             },
             'parameters': {
-                'textureSize': 'expr( [width * 1.0, height * 1.0] )'
+                'textureSize': 'expr( [width / 1.0 * 1.0, height / 1.0 * 1.0] )'
             }
         },
 
         {
-            'name': 'coc_max_tile_4',
-            'shader': '#source(car.dof.maxCoc)',
+            'name': 'coc_dilate_2',
+            'shader': '#source(car.dof.dilateCoc)',
             'inputs': {
-                'cocTex': 'coc_max_tile_2'
+                'cocTex': 'coc_dilate_1'
             },
             'outputs': {
                 'color': {
                     'parameters': {
-                        'width': 'expr(width / 4.0 * 1.0)',
-                        'height': 'expr(height / 4.0 * 1.0)',
-                        'minFilter': 'NEAREST',
-                        'magFilter': 'NEAREST'
+                        'width': 'expr(width * 1.0)',
+                        'height': 'expr(height * 1.0)',
+                        'type': 'HALF_FLOAT'
                     }
                 }
             },
             'parameters': {
-                'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )'
-            }
-        },
-
-        {
-            'name': 'coc_max_tile_8',
-            'shader': '#source(car.dof.maxCoc)',
-            'inputs': {
-                'cocTex': 'coc_max_tile_4'
+                'textureSize': 'expr( [width / 1.0 * 1.0, height / 1.0 * 1.0] )'
             },
-            'outputs': {
-                'color': {
-                    'parameters': {
-                        'width': 'expr(width / 8.0 * 1.0)',
-                        'height': 'expr(height / 8.0 * 1.0)',
-                        'minFilter': 'NEAREST',
-                        'magFilter': 'NEAREST'
-                    }
-                }
-            },
-            'parameters': {
-                'textureSize': 'expr( [width / 4.0 * 1.0, height / 4.0 * 1.0] )'
-            }
-        },
-
-        {
-            'name': 'coc_max_tile_16',
-            'shader': '#source(car.dof.maxCoc)',
-            'inputs': {
-                'cocTex': 'coc_max_tile_8'
-            },
-            'outputs': {
-                'color': {
-                    'parameters': {
-                        'width': 'expr(width / 16.0 * 1.0)',
-                        'height': 'expr(height / 16.0 * 1.0)',
-                        'minFilter': 'NEAREST',
-                        'magFilter': 'NEAREST'
-                    }
-                }
-            },
-            'parameters': {
-                'textureSize': 'expr( [width / 8.0 * 1.0, height / 8.0 * 1.0] )'
-            }
-        },
-
-
-        {
-            'name': 'coc_max_tile_32',
-            'shader': '#source(car.dof.maxCoc)',
-            'inputs': {
-                'cocTex': 'coc_max_tile_16'
-            },
-            'outputs': {
-                'color': {
-                    'parameters': {
-                        'width': 'expr(width / 32.0 * 1.0)',
-                        'height': 'expr(height / 32.0 * 1.0)',
-                        'minFilter': 'NEAREST',
-                        'magFilter': 'NEAREST'
-                    }
-                }
-            },
-            'parameters': {
-                'textureSize': 'expr( [width / 16.0 * 1.0, height / 16 * 1.0] )'
-            }
-        },
-
-        {
-            'name': 'coc_max_tile_64',
-            'shader': '#source(car.dof.maxCoc)',
-            'inputs': {
-                'cocTex': 'coc_max_tile_32'
-            },
-            'outputs': {
-                'color': {
-                    'parameters': {
-                        'width': 'expr(width / 64.0 * 1.0)',
-                        'height': 'expr(height / 64.0 * 1.0)',
-                        'minFilter': 'NEAREST',
-                        'magFilter': 'NEAREST'
-                    }
-                }
-            },
-            'parameters': {
-                'textureSize': 'expr( [width / 32.0 * 1.0, height / 32.0 * 1.0] )'
+            'defines': {
+                'VERTICAL': null
             }
         },
 
@@ -597,7 +513,7 @@ export default {
             'name': 'dof_separate_far',
             'shader': '#source(car.dof.separate)',
             'inputs': {
-                'mainTex': 'source_half',
+                'mainTex': 'source',
                 'cocTex': 'coc'
             },
             'outputs': DOF_BLUR_OUTPUTS,
@@ -610,7 +526,7 @@ export default {
             'name': 'dof_separate_near',
             'shader': '#source(car.dof.separate)',
             'inputs': {
-                'mainTex': 'source_half',
+                'mainTex': 'source',
                 'cocTex': 'coc'
             },
             'outputs': DOF_BLUR_OUTPUTS
@@ -702,7 +618,7 @@ export default {
             'inputs': {
                 'mainTex': 'dof_separate_near',
                 'cocTex': 'coc',
-                'maxCocTex': 'coc_max_tile_64'
+                'dilateCocTex': 'coc_dilate_2'
             },
             'outputs': DOF_BLUR_OUTPUTS,
             'parameters': DOF_BLUR_PARAMETERS,
@@ -717,7 +633,7 @@ export default {
             'inputs': {
                 'mainTex': 'dof_separate_near',
                 'cocTex': 'coc',
-                'maxCocTex': 'coc_max_tile_64'
+                'dilateCocTex': 'coc_dilate_2'
             },
             'outputs': DOF_BLUR_OUTPUTS,
             'parameters': DOF_BLUR_PARAMETERS,
@@ -733,7 +649,7 @@ export default {
             'inputs': {
                 'mainTex': 'dof_separate_near',
                 'cocTex': 'coc',
-                'maxCocTex': 'coc_max_tile_64'
+                'dilateCocTex': 'coc_dilate_2'
             },
             'outputs': DOF_BLUR_OUTPUTS,
             'parameters': DOF_BLUR_PARAMETERS,
@@ -748,7 +664,7 @@ export default {
             'inputs': {
                 'mainTex': 'dof_separate_near',
                 'cocTex': 'coc',
-                'maxCocTex': 'coc_max_tile_64'
+                'dilateCocTex': 'coc_dilate_2'
             },
             'outputs': DOF_BLUR_OUTPUTS,
             'parameters': DOF_BLUR_PARAMETERS,
@@ -766,7 +682,7 @@ export default {
                 'bTex': 'dof_blur_near_3',
                 'aTex': 'dof_blur_near_4',
                 'cocTex': 'coc',
-                'maxCocTex': 'coc_max_tile_64'
+                'dilateCocTex': 'coc_dilate_2'
             },
             'outputs': DOF_BLUR_OUTPUTS,
             'parameters': DOF_BLUR_PARAMETERS,
