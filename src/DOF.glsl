@@ -68,9 +68,9 @@ void main()
 
     gl_FragColor.rgb = mix(mix(sharpTexel.rgb, farTexel.rgb, ffa), nearTexel.rgb, nfa);
 
-    gl_FragColor.a = max(max(sharpTexel.a, nearTexel.a), farTexel.a);
+    gl_FragColor.a = max(max(sharpTexel.a, nfa), clamp(farTexel.a, 0.0, 1.0));
 
-    // gl_FragColor = sharpTexel;
+    // gl_FragColor = nearTexel;
 }
 
 @end
@@ -90,9 +90,11 @@ void main()
     vec4 color = decodeHDR(texture2D(mainTex, v_Texcoord));
     float coc = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
 #ifdef FARFIELD
-    color *= step(minCoc, coc);
+    color.a *= step(minCoc, coc);
 #else
-    color *= step(minCoc, -coc);
+    // Will have a dark halo on the edge after blurred if set whole color black.
+    // Only set alpha to zero.
+    color.a *= step(minCoc, -coc);
 #endif
 
     gl_FragColor = encodeHDR(color);
