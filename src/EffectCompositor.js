@@ -156,6 +156,24 @@ EffectCompositor.prototype.updateSSAO = function (renderer, scene, camera, frame
     this._ssaoPass.update(renderer, camera, frame);
 };
 
+EffectCompositor.prototype.updateSSR = function (renderer, scene, camera, sourceTexture, frame) {
+    this._ssrPass.setSSAOTexture(
+        this._enableSSAO ? this._ssaoPass.getTargetTexture() : null
+    );
+    var lights = scene.getLights();
+    for (var i = 0; i < lights.length; i++) {
+        if (lights[i].cubemap) {
+            this._ssrPass.setAmbientCubemap(
+                lights[i].cubemap,
+                // lights[i].getBRDFLookup(),
+                lights[i]._brdfLookup,
+                lights[i].intensity
+            );
+        }
+    }
+    this._ssrPass.update(renderer, camera, sourceTexture, frame);
+};
+
 /**
  * Enable SSAO effect
  */
@@ -197,6 +215,10 @@ EffectCompositor.prototype.disableSSR = function () {
  */
 EffectCompositor.prototype.getSSAOTexture = function () {
     return this._ssaoPass.getTargetTexture();
+};
+
+EffectCompositor.prototype.getSSRTexture = function () {
+    return this._ssrPass.getTargetTexture();
 };
 
 
@@ -406,29 +428,7 @@ EffectCompositor.prototype.setColorCorrection = function (type, value) {
 };
 
 EffectCompositor.prototype.composite = function (renderer, scene, camera, sourceTexture, depthTexture, frame) {
-
-    var targetTexture = sourceTexture;
-
-    if (this._enableSSR) {
-        this._ssrPass.update(renderer, camera, sourceTexture, frame);
-        targetTexture = this._ssrPass.getTargetTexture();
-
-        this._ssrPass.setSSAOTexture(
-            this._enableSSAO ? this._ssaoPass.getTargetTexture() : null
-        );
-        var lights = scene.getLights();
-        for (var i = 0; i < lights.length; i++) {
-            if (lights[i].cubemap) {
-                this._ssrPass.setAmbientCubemap(
-                    lights[i].cubemap,
-                    // lights[i].getBRDFLookup(),
-                    lights[i]._brdfLookup,
-                    lights[i].intensity
-                );
-            }
-        }
-    }
-    this._sourceNode.texture = targetTexture;
+    this._sourceNode.texture = sourceTexture;
 
     this._cocNode.setParameter('depth', depthTexture);
 

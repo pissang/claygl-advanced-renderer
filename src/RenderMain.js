@@ -177,6 +177,8 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
         this.afterRenderScene(renderer, scene, camera);
     }
     else {
+        var isSSREnabled = this._compositor.isSSREnabled();
+
         var sourceTex = this._sourceTex;
         var depthTex = this._depthTex;
         var frameBuffer = this._framebuffer;
@@ -190,6 +192,11 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
         renderer.render(scene, camera, true, this.preZ);
         this.afterRenderScene(renderer, scene, camera);
         frameBuffer.unbind(renderer);
+
+        if (isSSREnabled && needPostEffect) {
+            this._compositor.updateSSR(renderer, scene, camera, sourceTex, this._temporalSS.getFrame());
+            sourceTex = this._compositor.getSSRTexture();
+        }
 
         if (needTemporalPass) {
             var directOutput = !needPostEffect;
