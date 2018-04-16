@@ -68,6 +68,16 @@ vec4 ClipToAABB(vec4 color, vec3 minimum, vec3 maximum)
     color.rgb = center + offset * t;
     return color;
 }
+// Tonemap and untonmap from "High Quality Temporal Supersampling"
+vec4 Tonemap(vec4 color)
+{
+    return color / (Luminance(color) + 1.0);
+}
+
+vec4 Untonemap(vec4 color)
+{
+    return color / max(1.0 - Luminance(color), 0.0001);
+}
 
 void main()
 {
@@ -75,7 +85,7 @@ void main()
     vec4 motionTexel = texture2D(velocityTex, closest);
 
     if (still) {
-        gl_FragColor = mix(texture2D(currTex, v_Texcoord), texture2D(prevTex, v_Texcoord), 0.9);
+        gl_FragColor = Untonemap(mix(Tonemap(texture2D(currTex, v_Texcoord)), Tonemap(texture2D(prevTex, v_Texcoord)), 0.9));
         return;
     }
 
@@ -97,10 +107,10 @@ void main()
     vec4 corners = 4.0 * (topLeft + bottomRight) - 2.0 * color;
 
     // Sharpen output
-    color += (color - (corners * 0.166667)) * 2.718282 * sharpness;
-    color = clamp(color, 0.0, 10000.0);
+    // TODO will have black pixels.
+    // color += (color - (corners * 0.166667)) * 2.718282 * sharpness;
+    // color = clamp(color, 0.0, 1.0);
 
-    // Tonemap color and history samples
     vec4 average = (corners + color) * 0.142857;
 
     vec4 history = texture2D(prevTex, v_Texcoord - motion);
@@ -121,9 +131,9 @@ void main()
         mix(stillBlending, motionBlending, motionLength * motionAmplification),
         motionBlending, stillBlending
     );
-
-    color = mix(color, history, weight);
-    color = clamp(color, 0.0, 10000.0);
+    // TODO tonemap before clip aabb will have huge ghosts.
+    color = mix(Tonemap(color), Tonemap(history), weight);
+    color = Untonemap(clamp(color, 0.0, 1.0));
 
     gl_FragColor = color;
 }

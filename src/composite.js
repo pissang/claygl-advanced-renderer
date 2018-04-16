@@ -597,7 +597,7 @@ export default {
             'name': 'dof_separate_far',
             'shader': '#source(car.dof.separate)',
             'inputs': {
-                'mainTex': 'source',
+                'mainTex': 'source_half',
                 'cocTex': 'coc'
             },
             'outputs': DOF_BLUR_OUTPUTS,
@@ -610,7 +610,7 @@ export default {
             'name': 'dof_separate_near',
             'shader': '#source(car.dof.separate)',
             'inputs': {
-                'mainTex': 'source',
+                'mainTex': 'source_half',
                 'cocTex': 'coc'
             },
             'outputs': DOF_BLUR_OUTPUTS

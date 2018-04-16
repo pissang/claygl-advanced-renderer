@@ -31,17 +31,6 @@ var commonOutputs = {
 var FINAL_NODES_CHAIN = ['composite', 'FXAA'];
 
 function EffectCompositor() {
-    this._sourceTexture = new Texture2D({
-        type: Texture.HALF_FLOAT
-    });
-    this._depthTexture = new Texture2D({
-        format: Texture.DEPTH_COMPONENT,
-        type: Texture.UNSIGNED_INT
-    });
-
-    this._framebuffer = new FrameBuffer();
-    this._framebuffer.attach(this._sourceTexture);
-    this._framebuffer.attach(this._depthTexture, FrameBuffer.DEPTH_ATTACHMENT);
 
     this._gBufferPass = new GBuffer({
         renderTransparent: true,
@@ -52,7 +41,6 @@ function EffectCompositor() {
     this._compositor = createCompositor(effectJson);
 
     var sourceNode = this._compositor.getNodeByName('source');
-    sourceNode.texture = this._sourceTexture;
     var cocNode = this._compositor.getNodeByName('coc');
 
     this._sourceNode = sourceNode;
@@ -92,14 +80,6 @@ EffectCompositor.prototype.resize = function (width, height, dpr) {
     dpr = dpr || 1;
     width = width * dpr;
     height = height * dpr;
-    var sourceTexture = this._sourceTexture;
-    var depthTexture = this._depthTexture;
-
-    sourceTexture.width = width;
-    sourceTexture.height = height;
-    depthTexture.width = width;
-    depthTexture.height = height;
-
     this._gBufferPass.resize(width, height);
 };
 
@@ -219,19 +199,6 @@ EffectCompositor.prototype.getSSAOTexture = function () {
     return this._ssaoPass.getTargetTexture();
 };
 
-/**
- * @return {clay.FrameBuffer}
- */
-EffectCompositor.prototype.getSourceFrameBuffer = function () {
-    return this._framebuffer;
-};
-
-/**
- * @return {clay.Texture2D}
- */
-EffectCompositor.prototype.getSourceTexture = function () {
-    return this._sourceTexture;
-};
 
 EffectCompositor.prototype.getVelocityTexture = function () {
     return this._gBufferPass.getTargetTexture4();
@@ -438,9 +405,8 @@ EffectCompositor.prototype.setColorCorrection = function (type, value) {
     this._compositeNode.setParameter(type, value);
 };
 
-EffectCompositor.prototype.composite = function (renderer, scene, camera, framebuffer, frame, accumulating) {
+EffectCompositor.prototype.composite = function (renderer, scene, camera, sourceTexture, depthTexture, frame) {
 
-    var sourceTexture = this._sourceTexture;
     var targetTexture = sourceTexture;
 
     if (this._enableSSR) {
@@ -464,7 +430,7 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, frameb
     }
     this._sourceNode.texture = targetTexture;
 
-    this._cocNode.setParameter('depth', this._depthTexture);
+    this._cocNode.setParameter('depth', depthTexture);
 
     // var blurKernel = this._dofBlurKernel;
 
@@ -488,7 +454,7 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, frameb
     this._cocNode.setParameter('zNear', camera.near);
     this._cocNode.setParameter('zFar', camera.far);
 
-    this._compositor.render(renderer, framebuffer);
+    this._compositor.render(renderer);
 };
 
 EffectCompositor.prototype.isSSRFinished = function (frame) {
@@ -504,9 +470,6 @@ EffectCompositor.prototype.isSSREnabled = function () {
 };
 
 EffectCompositor.prototype.dispose = function (renderer) {
-    this._sourceTexture.dispose(renderer);
-    this._depthTexture.dispose(renderer);
-    this._framebuffer.dispose(renderer);
     this._compositor.dispose(renderer);
 
     this._gBufferPass.dispose(renderer);

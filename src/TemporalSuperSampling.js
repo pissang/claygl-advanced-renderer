@@ -1,5 +1,5 @@
 // Temporal Super Sample for static Scene
-import { compositor, FrameBuffer, Texture2D, Shader, Matrix4 } from 'claygl';
+import { compositor, FrameBuffer, Texture2D, Texture, Shader, Matrix4 } from 'claygl';
 
 var Pass = compositor.Pass;
 
@@ -23,18 +23,17 @@ function TemporalSuperSampling (opt) {
 
     this._frame = 0;
 
-    this._sourceTex = new Texture2D();
-    this._sourceFb = new FrameBuffer();
-    this._sourceFb.attach(this._sourceTex);
-
     // Frame texture before temporal supersampling
-    this._prevFrameTex = new Texture2D();
-    this._outputTex = new Texture2D();
+    this._prevFrameTex = new Texture2D({
+        type: Texture.HALF_FLOAT
+    });
+    this._outputTex = new Texture2D({
+        type: Texture.HALF_FLOAT
+    });
 
-    var taaPass = this._taaPass = new Pass({
+    this._taaPass = new Pass({
         fragment: Shader.source('car.taa')
     });
-    // taaPass.setUniform('depthTex', opt.depthTexture);
 
     this._velocityTex = opt.velocityTexture;
 
@@ -111,54 +110,32 @@ TemporalSuperSampling.prototype = {
         return this._frame;
     },
 
-    /**
-     * Get source framebuffer for usage
-     */
-    getSourceFrameBuffer: function () {
-        return this._sourceFb;
+    getTargetTexture: function () {
+        return this._prevFrameTex;
     },
 
     resize: function (width, height) {
-        if (this._sourceTex.width !== width || this._sourceTex.height !== height) {
+        this._prevFrameTex.width = width;
+        this._prevFrameTex.height = height;
 
-            this._prevFrameTex.width = width;
-            this._prevFrameTex.height = height;
-
-            this._outputTex.width = width;
-            this._outputTex.height = height;
-
-            this._sourceTex.width = width;
-            this._sourceTex.height = height;
-
-            this._prevFrameTex.dirty();
-            this._outputTex.dirty();
-            this._sourceTex.dirty();
-        }
+        this._outputTex.width = width;
+        this._outputTex.height = height;
     },
 
     isFinished: function () {
         return this._frame >= this._haltonSequence.length;
     },
 
-    render: function (renderer, camera, still) {
+    render: function (renderer, camera, sourceTex, still, output) {
         var taaPass = this._taaPass;
-        // if (this._frame === 0) {
-        //     // Direct output
-        //     taaPass.setUniform('weight1', 0);
-        //     taaPass.setUniform('weight2', 1);
-        // }
-        // else {
-        // taaPass.setUniform('weight1', 0.9);
-        // taaPass.setUniform('weight2', 0.1);
-        // }
+
         taaPass.setUniform('jitterOffset', this.getJitterOffset(renderer));
         taaPass.setUniform('velocityTex', this._velocityTex);
         taaPass.setUniform('prevTex', this._prevFrameTex);
-        taaPass.setUniform('currTex', this._sourceTex);
-        taaPass.setUniform('texelSize', [1 / this._sourceTex.width, 1 / this._sourceTex.height]);
+        taaPass.setUniform('currTex', sourceTex);
+        taaPass.setUniform('depthTex', this._depthTex);
+        taaPass.setUniform('texelSize', [1 / sourceTex.width, 1 / sourceTex.height]);
         taaPass.setUniform('velocityTexelSize', [1 / this._depthTex.width, 1 / this._depthTex.height]);
-        // taaPass.setUniform('sinTime', Math.sin(+(new Date()) / 8));
-        // taaPass.setUniform('projection', camera.projectionMatrix.array);
 
         taaPass.setUniform('still', !!still);
 
@@ -167,8 +144,10 @@ TemporalSuperSampling.prototype = {
         taaPass.render(renderer);
         this._taaFb.unbind(renderer);
 
-        this._outputPass.setUniform('texture', this._outputTex);
-        this._outputPass.render(renderer);
+        if (output) {
+            this._outputPass.setUniform('texture', this._outputTex);
+            this._outputPass.render(renderer);
+        }
 
         // Swap texture
         var tmp = this._prevFrameTex;
@@ -179,11 +158,9 @@ TemporalSuperSampling.prototype = {
     },
 
     dispose: function (renderer) {
-        this._sourceFb.dispose(renderer);
         this._taaFb.dispose(renderer);
         this._prevFrameTex.dispose(renderer);
         this._outputTex.dispose(renderer);
-        this._sourceTex.dispose(renderer);
         this._outputPass.dispose(renderer);
         this._taaPass.dispose(renderer);
     }

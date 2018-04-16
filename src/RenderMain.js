@@ -1,4 +1,4 @@
-import { prePass, Vector2 } from 'claygl';
+import { prePass, Vector2, FrameBuffer, Texture2D, Texture } from 'claygl';
 
 var ShadowMapPass = prePass.ShadowMap;
 
@@ -33,6 +33,16 @@ function RenderMain(renderer, scene, enableShadow) {
             this._temporalSS.jitterProjection(renderer, camera);
         }
     }, this);
+
+
+    this._framebuffer = new FrameBuffer();
+    this._sourceTex = new Texture2D({
+        type: Texture.HALF_FLOAT
+    });
+    this._depthTex = new Texture2D({
+        format: Texture.DEPTH_COMPONENT,
+        type: Texture.UNSIGNED_INT
+    });
 }
 
 /**
@@ -91,6 +101,8 @@ RenderMain.prototype.prepareRender = function () {
 
     if (this._enablePostEffect) {
         this._compositor.resize(renderer.getWidth(), renderer.getHeight(), renderer.getDevicePixelRatio());
+    }
+    if (this._temporalSS) {
         this._temporalSS.resize(renderer.getWidth(), renderer.getHeight());
     }
 };
@@ -156,39 +168,40 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
     this._updateSSAO(renderer, scene, camera, this._temporalSS.getFrame());
 
     var frameBuffer;
-    if (this._enablePostEffect) {
 
-        frameBuffer = this._compositor.getSourceFrameBuffer();
+    var needTemporalPass = this.needsTemporalSS() && (this._temporalSupportDynamic || accumulating);
+    var needPostEffect = this._enablePostEffect;
+
+    if (!needTemporalPass && !needPostEffect) {
+        renderer.render(scene, camera, true, this.preZ);
+        this.afterRenderScene(renderer, scene, camera);
+    }
+    else {
+        var sourceTex = this._sourceTex;
+        var depthTex = this._depthTex;
+        var frameBuffer = this._framebuffer;
+        depthTex.width = sourceTex.width = renderer.getWidth();
+        depthTex.height = sourceTex.height = renderer.getHeight();
+
+        frameBuffer.attach(sourceTex);
+        frameBuffer.attach(depthTex, FrameBuffer.DEPTH_ATTACHMENT);
         frameBuffer.bind(renderer);
         renderer.gl.clear(renderer.gl.DEPTH_BUFFER_BIT | renderer.gl.COLOR_BUFFER_BIT);
-        // FIXME Enable pre z will make alpha test failed
         renderer.render(scene, camera, true, this.preZ);
         this.afterRenderScene(renderer, scene, camera);
         frameBuffer.unbind(renderer);
 
-        if (this.needsTemporalSS() && (this._temporalSupportDynamic || accumulating)) {
-            this._compositor.composite(renderer, scene, camera, this._temporalSS.getSourceFrameBuffer(), this._temporalSS.getFrame(), accumulating);
-            this._temporalSS.render(renderer, camera, accumulating);
+        if (needTemporalPass) {
+            var directOutput = !needPostEffect;
+            this._temporalSS.render(renderer, camera, sourceTex, accumulating, directOutput);
+            sourceTex = this._temporalSS.getTargetTexture();
         }
-        else {
-            this._compositor.composite(renderer, scene, camera, null, 0);
-        }
-    }
-    else {
-        if (this.needsTemporalSS() && (this._temporalSupportDynamic || accumulating)) {
-            frameBuffer = this._temporalSS.getSourceFrameBuffer();
-            frameBuffer.bind(renderer);
-            renderer.saveClear();
-            renderer.clearBit = renderer.gl.DEPTH_BUFFER_BIT | renderer.gl.COLOR_BUFFER_BIT;
-            renderer.render(scene, camera, true, this.preZ);
-            this.afterRenderScene(renderer, scene, camera);
-            renderer.restoreClear();
-            frameBuffer.unbind(renderer);
-            this._temporalSS.render(renderer, camera, accumulating);
-        }
-        else {
-            renderer.render(scene, camera, true, this.preZ);
-            this.afterRenderScene(renderer, scene, camera);
+        if (needPostEffect) {
+            this._compositor.composite(
+                renderer, scene, camera, sourceTex, depthTex,
+                needTemporalPass ? this._temporalSS.getFrame() : 0,
+                accumulating
+            );
         }
     }
 
