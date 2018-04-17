@@ -139,6 +139,10 @@ TemporalSuperSampling.prototype = {
 
         taaPass.setUniform('still', !!still);
 
+        if (still) {
+            taaPass.setUniform('stillBlending', this._frame === 0 ? 0 : 0.95);
+        }
+
         this._taaFb.attach(this._outputTex);
         this._taaFb.bind(renderer);
         taaPass.render(renderer);

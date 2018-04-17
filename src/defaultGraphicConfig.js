@@ -31,7 +31,7 @@ export default {
             // Focal range of camera in word space. in this range image will be absolutely sharp.
             focalRange: 1,
             // Max out of focus blur radius.
-            blurRadius: 5,
+            blurRadius: 20,
             // fstop of camera. Smaller fstop will have shallow depth of field
             aperture: 5.6,
             // Blur quality. 'low'|'medium'|'high'|'ultra'

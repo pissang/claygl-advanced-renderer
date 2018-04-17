@@ -165,7 +165,7 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
 
     // Always update SSAO to make sure have correct ssaoMap status
     // TODO TRANSPARENT OBJECTS.
-    this._updateSSAO(renderer, scene, camera, this._temporalSS.getFrame());
+    this._updateSSAO(renderer, scene, camera, accumulating ? this._temporalSS.getFrame() : 0);
 
     var frameBuffer;
 

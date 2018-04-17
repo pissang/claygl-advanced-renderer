@@ -85,7 +85,13 @@ void main()
     vec4 motionTexel = texture2D(velocityTex, closest);
 
     if (still) {
-        gl_FragColor = Untonemap(mix(Tonemap(texture2D(currTex, v_Texcoord)), Tonemap(texture2D(prevTex, v_Texcoord)), 0.9));
+        gl_FragColor = Untonemap(
+            mix(
+                Tonemap(texture2D(currTex, v_Texcoord)),
+                Tonemap(texture2D(prevTex, v_Texcoord)),
+                stillBlending
+            )
+        );
         return;
     }
 

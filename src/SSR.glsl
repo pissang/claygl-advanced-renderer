@@ -336,8 +336,8 @@ void main()
 #endif
         }
         color.rgb += ndl * litTexel * (
-                F_Schlick(ndl, spec) * G_Smith(g, ndv, ndl) * vdh / (ndh * ndv + 0.001)
-            );
+            F_Schlick(ndl, spec) * G_Smith(g, ndv, ndl) * vdh / (ndh * ndv + 0.001)
+        );
     }
     color.rgb /= float(SAMPLE_PER_FRAME);
 #else

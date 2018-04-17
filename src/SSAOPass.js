@@ -126,7 +126,7 @@ SSAOPass.prototype.update = function (renderer, camera, frame) {
     this._frame++;
 
     ssaoPass.setUniform('kernel', this._kernels[
-        this._temporalFilter ? (this._frame % this._kernels.length) : 0
+        (this._temporalFilter ? this._frame : frame) % this._kernels.length
     ]);
     ssaoPass.setUniform('depthTex', this._depthTex);
     if (this._normalTex != null) {
