@@ -11,7 +11,7 @@ function RenderMain(renderer, scene, enableShadow) {
     this.renderer = renderer;
     this.scene = scene;
 
-    this.preZ = false;
+    this.preZ = true;
 
     this._compositor = new EffectCompositor();
 
