@@ -23,6 +23,15 @@ function ClayAdvancedRenderer(renderer, scene, timeline, graphicOpts) {
     this._graphicOpts = graphicOpts;
 
     timeline.on('frame', this._loop, this);
+
+    scene.on('click', function (e) {
+        this.setPostEffect({
+            depthOfField: {
+                focalDistance: e.distance
+            }
+        });
+        this.render();
+    }, this);
 }
 
 ClayAdvancedRenderer.prototype.render = function (renderImmediately) {
@@ -109,6 +118,6 @@ ClayAdvancedRenderer.prototype.dispose = function () {
     this._renderMain.dispose();
 };
 
-ClayAdvancedRenderer.version = '0.1.0';
+ClayAdvancedRenderer.version = '0.1.1';
 
 export default ClayAdvancedRenderer;

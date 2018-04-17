@@ -1,15 +1,15 @@
 var DOF_BLUR_OUTPUTS = {
     'color': {
         'parameters': {
-            'width': 'expr(width / 1.0 * 1.0)',
-            'height': 'expr(height / 1.0 * 1.0)',
+            'width': 'expr(width / 2.0 * 1.0)',
+            'height': 'expr(height / 2.0 * 1.0)',
             'type': 'HALF_FLOAT'
         }
     }
 };
 
 var DOF_BLUR_PARAMETERS = {
-    'textureSize': 'expr( [width / 1.0 * 1.0, height / 1.0 * 1.0] )'
+    'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )'
 };
 
 export default {

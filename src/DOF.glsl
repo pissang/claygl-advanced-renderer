@@ -70,7 +70,7 @@ void main()
 
     gl_FragColor.a = max(max(sharpTexel.a, nfa), clamp(farTexel.a, 0.0, 1.0));
 
-    // gl_FragColor = nearTexel;
+    // gl_FragColor = vec4(vec3(nearTexel.a), 1.0);
 }
 
 @end
@@ -121,9 +121,9 @@ void main()
 
     float coc0 = 1.0;
     for (int i = 0; i < 17; i++) {
-        vec2 duv = (float(i) - 8.0) * offset * 2.0;
+        vec2 duv = (float(i) - 8.0) * offset * 1.5;
         float coc = texture2D(cocTex, v_Texcoord + duv).r * 2.0 - 1.0;
-        coc *= pow(1.0 - abs(float(i) - 8.0) / 10.0, 2.0);
+        coc *= pow(1.0 - abs(float(i) - 8.0) / 8.0, 2.0);
         coc0 = min(coc0, coc);
     }
     gl_FragColor = vec4(coc0 * 0.5 + 0.5, 0.0, 0.0, 1.0);
