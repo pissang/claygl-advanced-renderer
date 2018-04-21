@@ -448,8 +448,8 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, source
     this._cocNode.setParameter('maxCoc', maxCoc);
     this._dofCompositeNode.setParameter('maxCoc', maxCoc);
     this._dofCompositeNode.setParameter('minCoc', minCoc);
-    this._dofFarFieldNode.setParameter('minCoc', minCoc);
-    this._dofNearFieldNode.setParameter('minCoc', minCoc);
+    this._dofFarFieldNode.setParameter('minCoc', minCoc / maxCoc);
+    this._dofNearFieldNode.setParameter('minCoc', minCoc / maxCoc);
 
     this._cocNode.setParameter('zNear', camera.near);
     this._cocNode.setParameter('zFar', camera.far);

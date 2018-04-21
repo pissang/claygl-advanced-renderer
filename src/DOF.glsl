@@ -64,7 +64,8 @@ void main()
     float nfa = clamp(nearTexel.a, 0.0, 1.0);
 
     // Convert CoC to far field alpha value.
-    float ffa = smoothstep(minCoc, 0.2, coc);
+    float ffa = smoothstep(minCoc / maxCoc, 0.2, coc);
+    ffa = smoothstep(0.0, 1.0, ffa);
 
     gl_FragColor.rgb = mix(mix(sharpTexel.rgb, farTexel.rgb, ffa), nearTexel.rgb, nfa);
 
@@ -123,7 +124,7 @@ void main()
     for (int i = 0; i < 17; i++) {
         vec2 duv = (float(i) - 8.0) * offset * 1.5;
         float coc = texture2D(cocTex, v_Texcoord + duv).r * 2.0 - 1.0;
-        coc *= pow(1.0 - abs(float(i) - 8.0) / 8.0, 2.0);
+        // coc *= pow(1.0 - abs(float(i) - 8.0) / 8.0, 2.0);
         coc0 = min(coc0, coc);
     }
     gl_FragColor = vec4(coc0 * 0.5 + 0.5, 0.0, 0.0, 1.0);
@@ -160,6 +161,7 @@ uniform sampler2D cocTex;
 uniform sampler2D dilateCocTex;
 
 uniform float maxCoc;
+uniform float minCoc;
 uniform vec2 textureSize;
 
 varying vec2 v_Texcoord;
@@ -211,6 +213,7 @@ void main()
 
     for (int i = 0; i < KERNEL_SIZE; i++) {
         vec2 duv = (float(i) - halfKernelSize) * offset;
+        float dist = length(duv);
         vec2 uv = clamp(v_Texcoord + duv, vec2(0.0), vec2(1.0));
         float coc = texture2D(cocTex, uv).r * 2.0 - 1.0;
         coc *= maxCoc;
@@ -218,8 +221,12 @@ void main()
         float w = 1.0;
 #ifdef FARFIELD
         // Reject pixels in focus
-        // PENDING A tiny threshold?
-        w = step(0.0, coc);
+        // w = step(minCoc, coc);
+        // w *= smoothstep(0.0, 1.0, coc);
+
+        // Gather as scatter. Reject pixels out of coc.
+        // PENDING May have problem in separable filter, add a threshold.
+        w *= step(dist, coc + minCoc);
 #endif
         weight += w;
 
@@ -261,6 +268,7 @@ void main()
     }
 
     weight /= float(KERNEL_SIZE);
+    weight = max(weight, 0.0001);
 
 #ifdef FINAL_PASS
     valR /= weight;
