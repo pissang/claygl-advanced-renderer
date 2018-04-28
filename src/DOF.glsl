@@ -66,7 +66,8 @@ void main()
     // Convert CoC to far field alpha value.
     float ffa = smoothstep(minCoc / maxCoc, 0.2, coc);
     // ffa = smoothstep(0.0, 1.0, ffa);
-    ffa *= clamp(farTexel.a, 0.0, 1.0);    // TODO Will have clear edge.9
+    // Also weghted by alpha to avoid black pixels.
+    ffa *= clamp(farTexel.a, 0.0, 1.0);
     gl_FragColor.rgb = mix(mix(sharpTexel.rgb, farTexel.rgb, ffa), nearTexel.rgb, nfa);
 
     gl_FragColor.a = max(max(sharpTexel.a, nfa), clamp(farTexel.a, 0.0, 1.0));

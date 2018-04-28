@@ -71,12 +71,12 @@ vec4 ClipToAABB(vec4 color, vec3 minimum, vec3 maximum)
 // Tonemap and untonmap from "High Quality Temporal Supersampling"
 vec4 Tonemap(vec4 color)
 {
-    return color / (Luminance(color) + 1.0);
+    return vec4(color.rgb / (Luminance(color) + 1.0), color.a);
 }
 
 vec4 Untonemap(vec4 color)
 {
-    return color / max(1.0 - Luminance(color), 0.0001);
+    return vec4(color.rgb / max(1.0 - Luminance(color), 0.0001), color.a);
 }
 
 void main()
