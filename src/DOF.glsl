@@ -64,8 +64,9 @@ void main()
     float nfa = clamp(nearTexel.a, 0.0, 1.0);
 
     // Convert CoC to far field alpha value.
-    float ffa = smoothstep(minCoc / maxCoc, 0.2, coc);
-    ffa = smoothstep(0.0, 1.0, ffa);
+    // float ffa = smoothstep(minCoc / maxCoc, 0.2, coc);
+    // ffa = smoothstep(0.0, 1.0, ffa);
+    float ffa = clamp(farTexel.a, 0.0, 1.0);
 
     gl_FragColor.rgb = mix(mix(sharpTexel.rgb, farTexel.rgb, ffa), nearTexel.rgb, nfa);
 
@@ -91,11 +92,11 @@ void main()
     vec4 color = decodeHDR(texture2D(mainTex, v_Texcoord));
     float coc = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
 #ifdef FARFIELD
-    color *= step(minCoc, coc);
+    color.a *= step(minCoc, coc);
 #else
     // Will have a dark halo on the edge after blurred if set whole color black.
     // Only set alpha to zero.
-    color *= step(minCoc, -coc);
+    color.a *= step(minCoc, -coc);
 #endif
 
     gl_FragColor = encodeHDR(color);
