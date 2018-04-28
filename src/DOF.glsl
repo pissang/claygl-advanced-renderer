@@ -71,7 +71,7 @@ void main()
 
     gl_FragColor.a = max(max(sharpTexel.a, nfa), clamp(farTexel.a, 0.0, 1.0));
 
-    // gl_FragColor = vec4(vec3(nearTexel.a), 1.0);
+    // gl_FragColor = farTexel;
 }
 
 @end
@@ -95,7 +95,7 @@ void main()
 #else
     // Will have a dark halo on the edge after blurred if set whole color black.
     // Only set alpha to zero.
-    color.a *= step(minCoc, -coc);
+    color *= step(minCoc, -coc);
 #endif
 
     gl_FragColor = encodeHDR(color);
@@ -124,7 +124,7 @@ void main()
     for (int i = 0; i < 17; i++) {
         vec2 duv = (float(i) - 8.0) * offset * 1.5;
         float coc = texture2D(cocTex, v_Texcoord + duv).r * 2.0 - 1.0;
-        // coc *= pow(1.0 - abs(float(i) - 8.0) / 8.0, 2.0);
+        // coc *= pow(1.0 - abs(float(i) - 8.0) / 10.0, 2.0);
         coc0 = min(coc0, coc);
     }
     gl_FragColor = vec4(coc0 * 0.5 + 0.5, 0.0, 0.0, 1.0);
@@ -171,6 +171,22 @@ vec2 multComplex(vec2 p, vec2 q)
     return vec2(p.x*q.x-p.y*q.y, p.x*q.y+p.y*q.x);
 }
 
+float GetSmallestCoc(vec2 uv)
+{
+    vec2 k = 1.0 / textureSize;
+
+    float coc = texture2D(cocTex, uv).r;
+
+    vec4 around = vec4(
+        texture2D(cocTex, uv - k).r,
+        texture2D(cocTex, uv + vec2(k.x, -k.y)).r,
+        texture2D(cocTex, uv + vec2(-k.x, k.y)).r,
+        texture2D(cocTex, uv + k).r
+    );
+
+    return min(min(min(min(around.x, around.y), around.z), around.w), coc);
+}
+
 @import clay.util.rgbm
 @import clay.util.float
 
@@ -204,18 +220,25 @@ void main()
     vec4 valB = vec4(0.0);
     vec4 valA = vec4(0.0);
 
-    vec2 offset = vec2(0.0, coc0 / halfKernelSize);
+    vec2 offset = vec2(0.0, abs(coc0) / halfKernelSize);
 #else
     vec4 val = vec4(0.0);
 
-    vec2 offset = vec2(texelSize.x / texelSize.y * coc0 / halfKernelSize, 0.0);
+    vec2 offset = vec2(texelSize.x / texelSize.y * abs(coc0) / halfKernelSize, 0.0);
 #endif
 
     for (int i = 0; i < KERNEL_SIZE; i++) {
         vec2 duv = (float(i) - halfKernelSize) * offset;
         float dist = length(duv);
         vec2 uv = clamp(v_Texcoord + duv, vec2(0.0), vec2(1.0));
+#ifdef FARFIELD
+        // Use the smallest coc around. remove coc aliasing.
+        // Avoid gather the wrong pixel when source image is anti-alised.
+        // Which will caused infocus pixels leak to the farfield.
+        float coc = GetSmallestCoc(uv) * 2.0 - 1.0;
+#else
         float coc = texture2D(cocTex, uv).r * 2.0 - 1.0;
+#endif
         coc *= maxCoc;
 
         float w = 1.0;
@@ -226,7 +249,7 @@ void main()
 
         // Gather as scatter. Reject pixels out of coc.
         // PENDING May have problem in separable filter, add a threshold.
-        w *= step(dist, coc + minCoc);
+        w *= step(dist, coc);
 #endif
         weight += w;
 
