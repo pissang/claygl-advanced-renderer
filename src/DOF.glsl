@@ -72,7 +72,9 @@ void main()
 
     gl_FragColor.a = max(max(sharpTexel.a, nfa), clamp(farTexel.a, 0.0, 1.0));
 
-    // gl_FragColor = farTexel;
+    // gl_FragColor.rgb = mix(sharpTexel.rgb, nearTexel.rgb, nfa);
+    // gl_FragColor = vec4(vec3(nearTexel.a), 1.0);
+    // gl_FragColor = nearTexel;
 }
 
 @end
@@ -92,7 +94,7 @@ void main()
     vec4 color = decodeHDR(texture2D(mainTex, v_Texcoord));
     float coc = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
 #ifdef FARFIELD
-    color.a *= step(0.0, coc);
+    color *= step(0.0, coc);
 #else
     // Will have a dark halo on the edge after blurred if set whole color black.
     // Only set alpha to zero.
@@ -125,7 +127,7 @@ void main()
     for (int i = 0; i < 17; i++) {
         vec2 duv = (float(i) - 8.0) * offset * 1.5;
         float coc = texture2D(cocTex, v_Texcoord + duv).r * 2.0 - 1.0;
-        // coc *= pow(1.0 - abs(float(i) - 8.0) / 10.0, 2.0);
+        coc *= pow(1.0 - abs(float(i) - 8.0) / 10.0, 2.0);
         coc0 = min(coc0, coc);
     }
     gl_FragColor = vec4(coc0 * 0.5 + 0.5, 0.0, 0.0, 1.0);
@@ -155,9 +157,9 @@ uniform sampler2D rTex;
 uniform sampler2D gTex;
 uniform sampler2D bTex;
 uniform sampler2D aTex;
-#else
-uniform sampler2D mainTex;
 #endif
+uniform sampler2D mainTex;
+
 uniform sampler2D cocTex;
 uniform sampler2D dilateCocTex;
 
@@ -273,6 +275,7 @@ void main()
 
         valA.xy += multComplex(aTexel.xy,c0c1.xy);
         valA.zw += multComplex(aTexel.zw,c0c1.zw);
+
 #else
         vec4 color = texture2D(mainTex, uv);
         float tmp;
@@ -311,3 +314,50 @@ void main()
 }
 
 @end
+
+
+// @export car.dof.blurNearAlpha
+
+// #define SHADER_NAME blurNearAlpha
+
+// uniform sampler2D mainTex;
+// uniform sampler2D cocTex;
+
+// uniform float maxCoc;
+// uniform vec2 textureSize;
+// // 0.0 is horizontal, 1.0 is vertical
+// uniform float blurDir;
+
+// varying vec2 v_Texcoord;
+
+// @import clay.util.rgbm
+// @import clay.util.clamp_sample
+
+// void main (void)
+// {
+//     @import clay.compositor.kernel.gaussian_13
+
+//     float coc0 = texture2D(cocTex, v_Texcoord).r * 2.0 - 1.0;
+//     coc0 *= -maxCoc;
+//     coc0 = max(0.0, coc0);
+
+//     vec2 texelSize = 1.0 / textureSize;
+//     vec2 off = vec2(texelSize.x / texelSize.y * coc0 / 6.0, coc0 / 6.0);
+
+//     off *= vec2(1.0 - blurDir, blurDir);
+
+//     float sum = 0.0;
+//     float weightAll = 0.0;
+
+//     // blur in y (horizontal)
+//     for (int i = 0; i < 13; i++) {
+//         float w = gaussianKernel[i];
+//         float a = texture2D(mainTex, v_Texcoord + float(i - 6) * off).a;
+//         sum += a * w;
+//         weightAll += w;
+//     }
+//     gl_FragColor = texture2D(mainTex, v_Texcoord);
+//     gl_FragColor.a = sum / weightAll;
+// }
+
+// @end

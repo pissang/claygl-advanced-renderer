@@ -436,7 +436,8 @@ EffectCompositor.prototype.composite = function (renderer, scene, camera, source
 
     var maxCoc = this._dofBlurRadius || 10;
     maxCoc /= renderer.getHeight();
-    var minCoc = 1 / renderer.getHeight();
+    // var minCoc = 1 / renderer.getHeight();
+    var minCoc = 0;
     // var jitter = Math.random();
     for (var i = 0; i < this._dofBlurNodes.length; i++) {
         var blurNode = this._dofBlurNodes[i];

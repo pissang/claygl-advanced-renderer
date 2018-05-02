@@ -642,7 +642,6 @@ export default {
             }
         },
 
-
         {
             'name': 'dof_blur_near_3',
             'shader': '#source(car.dof.blur)',
@@ -690,6 +689,36 @@ export default {
                 'FINAL_PASS': null
             }
         },
+
+        // {
+        //     'name': 'dof_blur_near_alpha_h',
+        //     'shader': '#source(car.dof.blurNearAlpha)',
+        //     'inputs': {
+        //         'mainTex': 'dof_blur_near_final',
+        //         'cocTex': 'coc_dilate_2'
+        //     },
+        //     'outputs': DOF_BLUR_OUTPUTS,
+        //     'parameters': {
+        //         'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )',
+        //         'blurDir': 0
+        //     }
+        // },
+
+
+        // {
+        //     'name': 'dof_blur_near_alpha_v',
+        //     'shader': '#source(car.dof.blurNearAlpha)',
+        //     'inputs': {
+        //         'mainTex': 'dof_blur_near_alpha_h',
+        //         'cocTex': 'coc_dilate_2'
+        //     },
+        //     'outputs': DOF_BLUR_OUTPUTS,
+        //     'parameters': {
+        //         'textureSize': 'expr( [width / 2.0 * 1.0, height / 2.0 * 1.0] )',
+        //         'blurDir': 1
+        //     }
+        // },
+
 
 
         // {
