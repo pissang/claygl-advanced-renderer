@@ -194,7 +194,13 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
         frameBuffer.unbind(renderer);
 
         if (isSSREnabled && needPostEffect) {
-            this._compositor.updateSSR(renderer, scene, camera, sourceTex, this._temporalSS.getFrame());
+            this._compositor.updateSSR(
+                renderer, scene, camera,
+                sourceTex,
+                // TODO reprojection
+                needTemporalPass ? this._temporalSS.getTargetTexture() : sourceTex,
+                this._temporalSS.getFrame()
+            );
             sourceTex = this._compositor.getSSRTexture();
         }
 

@@ -114,6 +114,10 @@ TemporalSuperSampling.prototype = {
         return this._prevFrameTex;
     },
 
+    // getPrevFrameTexture: function () {
+    //     return this._outputTex;
+    // },
+
     resize: function (width, height) {
         this._prevFrameTex.width = width;
         this._prevFrameTex.height = height;

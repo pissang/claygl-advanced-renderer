@@ -99,7 +99,7 @@ SSRPass.prototype.setAmbientCubemap = function (specularCubemap, brdfLookup, spe
     this._ssrPass.material[enableSpecularMap ? 'enableTexture' : 'disableTexture']('specularCubemap');
 };
 
-SSRPass.prototype.update = function (renderer, camera, sourceTexture, frame) {
+SSRPass.prototype.update = function (renderer, camera, sourceTexture, reflectionSourceTexture, frame) {
     var width = renderer.getWidth();
     var height = renderer.getHeight();
     var ssrTexture = this._ssrTexture;
@@ -123,7 +123,7 @@ SSRPass.prototype.update = function (renderer, camera, sourceTexture, frame) {
     Matrix4.transpose(toViewSpace, camera.worldTransform);
     Matrix4.transpose(toWorldSpace, camera.viewMatrix);
 
-    ssrPass.setUniform('sourceTexture', sourceTexture);
+    ssrPass.setUniform('sourceTexture', reflectionSourceTexture);
     ssrPass.setUniform('projection', camera.projectionMatrix.array);
     ssrPass.setUniform('projectionInv', camera.invProjectionMatrix.array);
     ssrPass.setUniform('toViewSpace', toViewSpace.array);

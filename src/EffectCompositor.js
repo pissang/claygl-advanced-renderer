@@ -156,7 +156,7 @@ EffectCompositor.prototype.updateSSAO = function (renderer, scene, camera, frame
     this._ssaoPass.update(renderer, camera, frame);
 };
 
-EffectCompositor.prototype.updateSSR = function (renderer, scene, camera, sourceTexture, frame) {
+EffectCompositor.prototype.updateSSR = function (renderer, scene, camera, sourceTexture, reflectionSourceTexture, frame) {
     this._ssrPass.setSSAOTexture(
         this._enableSSAO ? this._ssaoPass.getTargetTexture() : null
     );
@@ -171,7 +171,7 @@ EffectCompositor.prototype.updateSSR = function (renderer, scene, camera, source
             );
         }
     }
-    this._ssrPass.update(renderer, camera, sourceTexture, frame);
+    this._ssrPass.update(renderer, camera, sourceTexture, reflectionSourceTexture, frame);
 };
 
 /**
