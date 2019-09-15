@@ -87,17 +87,17 @@ RenderMain.prototype.prepareRender = function () {
         this._temporalSS.resetFrame();
     }
 
-    var lights = scene.getLights();
-    for (var i = 0; i < lights.length; i++) {
-        if (lights[i].cubemap) {
-            if (this._compositor && this._compositor.isSSREnabled()) {
-                lights[i].invisible = true;
-            }
-            else {
-                lights[i].invisible = false;
-            }
-        }
-    }
+    // var lights = scene.getLights();
+    // for (var i = 0; i < lights.length; i++) {
+    //     if (lights[i].cubemap) {
+    //         if (this._compositor && this._compositor.isSSREnabled()) {
+    //             lights[i].invisible = true;
+    //         }
+    //         else {
+    //             lights[i].invisible = false;
+    //         }
+    //     }
+    // }
 
     if (this._enablePostEffect) {
         this._compositor.resize(renderer.getWidth(), renderer.getHeight(), renderer.getDevicePixelRatio());
@@ -198,7 +198,8 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
                 renderer, scene, camera,
                 sourceTex,
                 // TODO reprojection
-                needTemporalPass ? this._temporalSS.getTargetTexture() : sourceTex,
+                sourceTex,
+                // needTemporalPass ? this._temporalSS.getTargetTexture() : sourceTex,
                 this._temporalSS.getFrame()
             );
             sourceTex = this._compositor.getSSRTexture();
@@ -308,7 +309,7 @@ RenderMain.prototype.setPostEffect = function (opts, api) {
     ['radius', 'quality', 'intensity', 'temporalFilter'].forEach(function (name) {
         compositor.setSSAOParameter(name, ssaoOpts[name]);
     });
-    ['quality', 'maxRoughness', 'physical'].forEach(function (name) {
+    ['quality', 'maxRoughness'].forEach(function (name) {
         compositor.setSSRParameter(name, ssrOpts[name]);
     });
     ['quality', 'focalDistance', 'focalRange', 'blurRadius', 'aperture'].forEach(function (name) {

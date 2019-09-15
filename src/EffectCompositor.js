@@ -160,17 +160,6 @@ EffectCompositor.prototype.updateSSR = function (renderer, scene, camera, source
     this._ssrPass.setSSAOTexture(
         this._enableSSAO ? this._ssaoPass.getTargetTexture() : null
     );
-    var lights = scene.getLights();
-    for (var i = 0; i < lights.length; i++) {
-        if (lights[i].cubemap) {
-            this._ssrPass.setAmbientCubemap(
-                lights[i].cubemap,
-                // lights[i].getBRDFLookup(),
-                lights[i]._brdfLookup,
-                lights[i].intensity
-            );
-        }
-    }
     this._ssrPass.update(renderer, camera, sourceTexture, reflectionSourceTexture, frame);
 };
 
@@ -200,14 +189,12 @@ EffectCompositor.prototype.disableVelocityBuffer = function () {
  */
 EffectCompositor.prototype.enableSSR = function () {
     this._enableSSR = true;
-    this._gBufferPass.enableTargetTexture3 = true;
 };
 /**
  * Disable SSR effect
  */
 EffectCompositor.prototype.disableSSR = function () {
     this._enableSSR = false;
-    this._gBufferPass.enableTargetTexture3 = false;
 };
 
 /**
@@ -388,17 +375,11 @@ EffectCompositor.prototype.setSSRParameter = function (name, value) {
         case 'maxRoughness':
             this._ssrPass.setParameter('minGlossiness', Math.max(Math.min(1.0 - value, 1.0), 0.0));
             break;
-        case 'physical':
-            this.setPhysicallyCorrectSSR(value);
-            break;
         default:
             console.warn('Unkown SSR parameter ' + name);
     }
 };
 
-EffectCompositor.prototype.setPhysicallyCorrectSSR = function (physical) {
-    this._ssrPass.setPhysicallyCorrect(physical);
-};
 /**
  * Set color of edge
  */
