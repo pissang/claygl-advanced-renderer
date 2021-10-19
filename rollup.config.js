@@ -8,13 +8,11 @@ export default {
         commonjs()
     ],
     // sourceMap: true,
-    output: [
-        {
-            format: 'umd',
-            name: 'ClayAdvancedRenderer',
-            file: 'dist/claygl-advanced-renderer.js'
-        }
-    ],
-    external: ['claygl'],
-    globals: { 'claygl': 'clay' }
+    output: {
+        format: 'umd',
+        name: 'ClayAdvancedRenderer',
+        file: 'dist/claygl-advanced-renderer.js',
+        globals: { 'claygl': 'clay' }
+    },
+    external: ['claygl']
 };
