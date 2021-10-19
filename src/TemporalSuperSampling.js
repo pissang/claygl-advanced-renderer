@@ -118,12 +118,12 @@ TemporalSuperSampling.prototype = {
     //     return this._outputTex;
     // },
 
-    resize: function (width, height) {
-        this._prevFrameTex.width = width;
-        this._prevFrameTex.height = height;
+    resize: function (width, height, dpr) {
+        this._prevFrameTex.width = width * dpr;
+        this._prevFrameTex.height = height * dpr;
 
-        this._outputTex.width = width;
-        this._outputTex.height = height;
+        this._outputTex.width = width * dpr;
+        this._outputTex.height = height * dpr;
     },
 
     isFinished: function () {

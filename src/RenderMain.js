@@ -103,7 +103,7 @@ RenderMain.prototype.prepareRender = function () {
         this._compositor.resize(renderer.getWidth(), renderer.getHeight(), renderer.getDevicePixelRatio());
     }
     if (this._temporalSS) {
-        this._temporalSS.resize(renderer.getWidth(), renderer.getHeight());
+        this._temporalSS.resize(renderer.getWidth(), renderer.getHeight(), renderer.getDevicePixelRatio());
     }
 };
 
@@ -182,8 +182,9 @@ RenderMain.prototype._doRender = function (scene, camera, accumulating, accumFra
         var sourceTex = this._sourceTex;
         var depthTex = this._depthTex;
         var frameBuffer = this._framebuffer;
-        depthTex.width = sourceTex.width = renderer.getWidth();
-        depthTex.height = sourceTex.height = renderer.getHeight();
+        var dpr = renderer.getDevicePixelRatio();
+        depthTex.width = sourceTex.width = renderer.getWidth() * dpr;
+        depthTex.height = sourceTex.height = renderer.getHeight() * dpr;
 
         frameBuffer.attach(sourceTex);
         frameBuffer.attach(depthTex, FrameBuffer.DEPTH_ATTACHMENT);

@@ -86,8 +86,9 @@ SSRPass.prototype.setAmbientCubemap = function (specularCubemap, brdfLookup, spe
 };
 
 SSRPass.prototype.update = function (renderer, camera, sourceTexture, reflectionSourceTexture, frame) {
-    var width = renderer.getWidth();
-    var height = renderer.getHeight();
+    var dpr = renderer.getDevicePixelRatio();
+    var width = renderer.getWidth() * dpr;
+    var height = renderer.getHeight() * dpr;
     var ssrTexture = this._ssrTexture;
     var texture2 = this._texture2;
     var texture3 = this._texture3;
